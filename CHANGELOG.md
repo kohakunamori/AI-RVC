@@ -13,7 +13,8 @@
 - 分离配置读取统一验证固定资源，运行时配置写入会话目录；检查输出文件唯一性、主唱模型语义、采样率/通道/帧数和非有限值。纯伴奏区间允许静音主唱，不按相对能量交换音轨。短输入补长和裁切保留浮点精度。
 - 安装器兼容新版 `CUDA UMD Version` 驱动信息；本地 Gradio 回环自检绕过系统代理，并保留已有代理排除项。
 - 修复花丸等角色的标准双索引压缩包安装失败：验证 `trained_` 为零向量训练模板后，选择同名 `added_` 推理索引；保留原文件及完整向量校验，损坏或真正冲突的索引仍拒绝。
-- 增补数值、参数、分离完整性、原生精度、纯人声与长音频回归，本地全量 399 项通过。花丸同一模型与参数完成《Far far away》《梦的光点》《あこがれランララン》《SILENT PAIN》《だから僕は音楽を辞めた》五首全曲；另完成 Rin 整曲、官方 UVR5、本地兼容入口、MCP 与浏览器纯人声实测。两种界面语言、窄屏、播放和原始 WAV 下载均已实际检查。
+- 修复干净环境准备默认模型时误报缺失：持久资源清单只要求六组固定权重与原始配置，派生运行配置在会话目录生成。真实模型在干净目录中通过 SHA-256 校验及下载器准备；移除会话配置后仍可正常检查就绪，原始配置缺失仍报错。
+- 增补数值、参数、分离完整性、原生精度、纯人声、长音频与干净安装回归，本地全量 400 项通过。花丸同一模型与参数完成《Far far away》《梦的光点》《あこがれランララン》《SILENT PAIN》《だから僕は音楽を辞めた》五首全曲；另完成 Rin 整曲、官方 UVR5、本地兼容入口、MCP 与浏览器纯人声实测。两种界面语言、窄屏、播放和原始 WAV 下载均已实际检查。
 - 统一源码、Compose 与 OCI 构建版本为 1.6.0，更新 README、架构图、兼容性、播放器模式及发布准备文档。模型、索引、原曲和试听音频不进入发行源码。来源和量化结果见 `docs/TelkNet同源更新.md`；当前为候选版，四种便携包及两种 Docker 镜像须分别完成本版成品验收后才正式发布。
 
 ### English
@@ -27,7 +28,8 @@
 - Verify pinned separation configurations, unique output files, model stem semantics and audio frames/rate/channels/finiteness. Keep legitimately silent vocal stems in instrumental sections. Retain precision during short-input padding and cropping.
 - Support the new `CUDA UMD Version` driver header and bypass proxies for Gradio loopback checks while preserving existing exclusions.
 - Accept standard paired `trained_` / `added_` character archives, including Hanamaru. Verify the former is an empty trained template before selecting the latter; preserve both files and full vector validation, and reject corrupt or ambiguous indices.
-- Pass all 399 local regressions for numerical behavior, parameters, separation integrity, native precision, vocal input and long-form conversion. Complete five full Hanamaru covers with identical settings: “Far far away”, “梦的光点”, “あこがれランララン”, “SILENT PAIN” and “だから僕は音楽を辞めた”. Also exercise a full Rin cover, official UVR5, the local compatibility path, MCP and browser vocal conversion. Verify both UI languages, mobile layout, playback and original WAV downloads in a real browser.
+- Fix false missing-model errors during clean installation: persistent assets include the six pinned weight/configuration pairs, while derived runtime configurations belong to the session directory. Verify preparation with real model hashes in a clean directory; readiness survives removing session configurations and still rejects missing original configurations.
+- Pass all 400 local regressions for numerical behavior, parameters, separation integrity, native precision, vocal input, long-form conversion and clean installation. Complete five full Hanamaru covers with identical settings: “Far far away”, “梦的光点”, “あこがれランララン”, “SILENT PAIN” and “だから僕は音楽を辞めた”. Also exercise a full Rin cover, official UVR5, the local compatibility path, MCP and browser vocal conversion. Verify both UI languages, mobile layout, playback and original WAV downloads in a real browser.
 - Set source, Compose and OCI build versions to 1.6.0 and update architecture, compatibility, player-mode and release documentation. Exclude model weights, indices, source songs and listening outputs from the source release. See `docs/TelkNet同源更新.md` for provenance and measurements. This is a release candidate; all four portable packages and both Docker images require separate acceptance before public release.
 
 ## 1.5.1 — 2026-09-06

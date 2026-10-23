@@ -210,7 +210,7 @@ class ModelDefaultTests(unittest.TestCase):
                 "\n".join(flat_paths),
             )
             self.assertIn(
-                "assets/separator_models/Xe/bs_roformer_leap_xe_config_voc.yaml",
+                "assets/separator_models/Xe/leap_xe_config_voc.yaml",
                 "\n".join(flat_paths),
             )
             self.assertIn(
@@ -227,6 +227,52 @@ class ModelDefaultTests(unittest.TestCase):
             )
             self.assertFalse(
                 download_models.check_required_default_separator_models(Path(tmp_dir))
+            )
+
+    def test_clean_model_preparation_does_not_require_session_configs_in_assets(self):
+        from infer import separator
+        from tools import download_models
+
+        class DownloadOnlySeparator:
+            def __init__(self, *, model_file_dir, output_dir, **kwargs):
+                self.model_file_dir = model_file_dir
+                self.output_dir = output_dir
+
+            def download_model_files(self, name):
+                raise AssertionError(f"Unexpected unpinned download: {name}")
+
+        def download_fixture(_repo, filename, directory, _revision, _sha256):
+            destination = Path(directory) / filename
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.suffix == ".yaml":
+                destination.write_text("audio:\n  sample_rate: 44100\n", encoding="utf-8")
+            else:
+                destination.write_bytes(b"checkpoint fixture")
+            return destination
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("audio_separator.separator.Separator", DownloadOnlySeparator), patch(
+                "tools.model_assets.download_pinned_asset", side_effect=download_fixture
+            ):
+                self.assertTrue(download_models.download_default_separator_models(root))
+
+            runtime_files = list((root / "temp" / "separator_download" / "_model_configs").rglob("*.yaml"))
+            self.assertEqual(len(runtime_files), 3)
+            for runtime_file in runtime_files:
+                runtime_file.unlink()
+            self.assertTrue(download_models.check_required_default_separator_models(root))
+            for spec in separator._CUSTOM_AUDIO_SEPARATOR_MODELS.values():
+                if "runtime_config_filename" in spec:
+                    asset = root / "assets" / "separator_models" / spec.get("local_subdir", "")
+                    self.assertFalse((asset / spec["runtime_config_filename"]).exists())
+
+            config = root / "assets" / "separator_models" / separator.LEAP_XE_VOCALS_CONFIG_FILENAME
+            config.unlink()
+            self.assertFalse(download_models.check_required_default_separator_models(root))
+            self.assertIn(
+                str(config.relative_to(root)),
+                "\n".join(download_models.get_missing_default_separator_model_files(root)),
             )
 
     def test_leap_runtime_config_declares_bs_roformer_model_type(self):

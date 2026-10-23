@@ -195,7 +195,7 @@ def _download_hf_file(repo_id: str, filename: str, model_dir: Path) -> Path:
 def get_default_separator_asset_paths(
     root_dir: Optional[Path] = None,
 ) -> Dict[str, List[Path]]:
-    """Return required files for the current default separation route."""
+    """Return persistent model assets; runtime configs belong to each session."""
     from infer.separator import (
         KARAOKE_SOTA_MODELS,
         LEAP_XE_VOCALS_MODEL,
@@ -211,11 +211,6 @@ def get_default_separator_asset_paths(
         "Leap XE 90 vocals": [
             model_dir / leap_spec["model_filename"],
             model_dir / leap_spec["config_filename"],
-            *(
-                [model_dir / leap_spec["runtime_config_filename"]]
-                if "runtime_config_filename" in leap_spec
-                else []
-            ),
         ],
     }
     for label, model_name in (
@@ -225,7 +220,7 @@ def get_default_separator_asset_paths(
         spec = _CUSTOM_AUDIO_SEPARATOR_MODELS[model_name]
         asset_dir = model_dir / spec["local_subdir"]
         assets[label] = [asset_dir / spec[key] for key in (
-            "model_filename", "config_filename", "runtime_config_filename",
+            "model_filename", "config_filename",
         )]
     for model_name in KARAOKE_SOTA_MODELS:
         spec = _CUSTOM_AUDIO_SEPARATOR_MODELS[model_name]
