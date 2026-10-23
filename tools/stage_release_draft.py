@@ -45,10 +45,13 @@ def main() -> None:
     version = base64.b64decode(api(f"{prefix}/contents/VERSION?ref={source}")["content"]).decode().strip()
     if tag != f"v{version}":
         raise RuntimeError("Release tag differs from the built source VERSION")
+    # GitHub's by-tag REST endpoint excludes unpublished releases without a tag.
+    # gh resolves those drafts through the release list; subsequent reads use ID.
+    release_id = json.loads(gh("release", "view", tag, "--repo", repository, "--json", "id"))["id"]
 
     def draft():
-        release = api(f"{prefix}/releases/tags/{tag}")
-        if not release["draft"] or release["target_commitish"] != source:
+        release = api(f"{prefix}/releases/{release_id}")
+        if not release["draft"] or release["target_commitish"] != source or release["tag_name"] != tag:
             raise RuntimeError("The destination must remain a draft targeting the exact built commit")
         return release
 

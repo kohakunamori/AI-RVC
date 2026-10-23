@@ -1,6 +1,7 @@
 import base64
 import copy
 import hashlib
+import json
 import os
 import unittest
 from pathlib import Path
@@ -16,7 +17,7 @@ class ReleaseStagingTests(unittest.TestCase):
         self.run = dict(status="completed", conclusion="success", head_sha=self.source,
                         path=".github/workflows/build-executables.yml", head_repository={"full_name": "owner/repo"},
                         html_url="https://github.com/owner/repo/actions/runs/123")
-        self.release = dict(draft=True, target_commitish=self.source, assets=[])
+        self.release = dict(draft=True, target_commitish=self.source, tag_name="v1.6.0", assets=[])
         self.artifacts = dict(total_count=4, artifacts=[dict(name=name, expired=False) for name in self.names])
         self.version = "1.6.0"
         self.corrupt = False
@@ -29,12 +30,14 @@ class ReleaseStagingTests(unittest.TestCase):
             return copy.deepcopy(self.run)
         if "/contents/VERSION?" in path:
             return {"content": base64.b64encode(self.version.encode()).decode()}
-        if "/releases/tags/" in path:
+        if path.endswith("/releases/42"):
             return copy.deepcopy(self.release)
         raise AssertionError(path)
 
     def gh(self, *args):
-        if args[:2] == ("run", "download"):
+        if args[:2] == ("release", "view"):
+            return json.dumps({"id": 42})
+        elif args[:2] == ("run", "download"):
             root = Path(args[-1])
             for name in self.names:
                 directory = root / name
