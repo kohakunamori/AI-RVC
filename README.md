@@ -4,11 +4,15 @@ AI-RVC 是一个开源的 [RVC v1/v2](https://github.com/RVC-Project/Retrieval-b
 
 > 在线体验：[TelkNet AI 翻唱](https://telknet.cc/tools/ai-rvc)
 
-**1.6.0 候选版**同步了 TelkNet 2026-10-23 的同源音频更新：纯人声输入、RMVPE 转音边界核验、原生模型精度、按原时间线拼接和保留目标相位的后处理，并修复角色双索引安装、干净目录模型检查及冻结程序切换官方源码后的模块缓存错误。代码在本项目独立运行；花丸五首完整翻唱已通过技术检查，中英文页面均已实际操作。来源与实测见 [同步记录](docs/TelkNet同源更新.md)，逐个候选的测试、构建与剩余验收见 [1.6.0 发布准备](docs/发布准备.md)。本版安装包与镜像尚未正式发布，以下公开下载仍指向稳定版 1.5.1。
+**1.6.0** 同步了 TelkNet 的同源翻唱更新，继续在本项目独立运行。已有干声可以直接换声；转音、长歌曲拼接和模型精度处理得到改进，同时修复双索引角色包、首次模型准备和官方 UVR5 路线的问题。完整改动见 [更新说明](CHANGELOG.md)，来源与实测见 [同步记录](docs/TelkNet同源更新.md)。
+
+English: **1.6.0** brings TelkNet's shared cover updates to this standalone app. Convert dry vocals directly, with improvements to pitch transitions, long-song joins and native model precision. Paired character indices, first-time model preparation and the official UVR5 route are fixed. See the changelog and shared-update record above for details.
 
 **运行入口：Windows / Linux / WSL2 / Docker / Google Colab / Hugging Face Spaces**；各平台验证范围见下文。
 
-**[1.5.1 已发布](https://github.com/mason369/AI-RVC/releases/tag/v1.5.1)**。Windows/Linux CPU/CUDA 四种便携包均完成逐文件校验及默认、官方两条真实翻唱路线，共验证 44 个 Float32 输出；各构建均通过 343 项回归。Release 提供完整分卷、SHA-256、实际运行记录和与 v1.4.1 的全量文件对照。公开 Docker 镜像 `1.5.1-cpu` / `1.5.1-cuda` 均已匿名拉取并完成两条真实路线，另验证 22 个 Float32 输出，见[平台验收](docs/平台适配与验收.md)。部署、持久化和登录用法见 [Docker 使用指南](docs/Docker使用指南.md)，发行核对见[发布与验收](docs/发布准备.md)。
+**[下载 1.6.0](https://github.com/mason369/AI-RVC/releases/tag/v1.6.0)**：Windows / Linux 各有 CPU、GPU 便携包；容器标签为 `1.6.0-cpu`、`1.6.0-cuda`。Release 页面只保留安装包、SHA-256 校验文件和简短更新说明。部署用法见 [Docker 使用指南](docs/Docker使用指南.md)，验证范围见[平台验收](docs/平台适配与验收.md)。
+
+English: Download **1.6.0** from the release link above: CPU/GPU portable packages for Windows and Linux, plus `1.6.0-cpu` and `1.6.0-cuda` container images. The release contains packages, SHA-256 checksums and brief notes. Deployment instructions and validation scope remain in the linked documentation.
 
 ## 界面预览
 
@@ -96,7 +100,7 @@ Leap 在这一个受控样本中高 **0.8280 dB**，三个连续分段也都领�
 
 ## 平台入口
 
-下表列出源码和成品提供的入口。稳定版 1.5.1 的 Windows/Linux CPU/CUDA 四种便携包均已实际完成默认与官方翻唱；Linux 成品在 WSL2 Ubuntu 22.04 中运行，GPU 实测为 RTX 4070 Ti SUPER。1.6.0 候选版另行验收，不能沿用旧版通过结论。各项证据和未验收环境见[平台适配与验收](docs/平台适配与验收.md)，这些结果不能推广为所有宿主机或显卡都已通过。
+下表列出源码和成品提供的入口。1.6.0 通过 Actions 重新构建和检查，已有真实翻唱记录与各平台的未测范围保留在[平台适配与验收](docs/平台适配与验收.md)；历史版本、源码实测和新成品 CI 的结果分别记录，不推广为所有宿主机或显卡都已验证。English: Version 1.6.0 is rebuilt and checked through Actions. The linked platform document distinguishes historical releases, actual source/runtime tests and rebuilt-artifact CI coverage; it does not claim that every host or GPU was tested.
 
 | 平台 | 入口状态 | 安装方式 | 说明 |
 |------|------|---------|------|
@@ -135,14 +139,14 @@ Leap 在这一个受控样本中高 **0.8280 dB**，三个连续分段也都领�
 
 #### Windows
 
-1. 从 [v1.5.1 Release](https://github.com/mason369/AI-RVC/releases/tag/v1.5.1) 下载所选 CPU/GPU 包的全部 `AI-RVC-Windows-CPU-Portable.7z.*` 或 `AI-RVC-Windows-GPU-Portable.7z.*` 分卷及对应 `SHA256SUMS`
+1. 从 [v1.6.0 Release](https://github.com/mason369/AI-RVC/releases/tag/v1.6.0) 下载所选 CPU/GPU 包的全部 `AI-RVC-Windows-CPU-Portable.7z.*` 或 `AI-RVC-Windows-GPU-Portable.7z.*` 分卷及对应 `SHA256SUMS`
 2. 将同一包的全部分卷放在同一目录，用 7-Zip 打开 `.7z.001`，解压到新目录
 3. 双击所选包内的 `AI-RVC-Windows-CPU.exe` 或 `AI-RVC-Windows-GPU.exe` 启动
 4. 浏览器自动打开 http://127.0.0.1:7860
 
 #### Linux
 
-1. 从 [v1.5.1 Release](https://github.com/mason369/AI-RVC/releases/tag/v1.5.1) 下载所选 CPU/GPU 包的全部 `AI-RVC-Linux-CPU-Portable.tar.gz.part*` 或 `AI-RVC-Linux-GPU-Portable.tar.gz.part*` 分卷及对应 `SHA256SUMS`
+1. 从 [v1.6.0 Release](https://github.com/mason369/AI-RVC/releases/tag/v1.6.0) 下载所选 CPU/GPU 包的全部 `AI-RVC-Linux-CPU-Portable.tar.gz.part*` 或 `AI-RVC-Linux-GPU-Portable.tar.gz.part*` 分卷及对应 `SHA256SUMS`
 2. 校验后按文件名顺序合并分卷并解压，例如 GPU 包：`cat AI-RVC-Linux-GPU-Portable.tar.gz.part* | tar -xzf -`
 3. 为所选包内的 `AI-RVC-Linux-CPU` 或 `AI-RVC-Linux-GPU` 添加执行权限
 4. 运行对应的可执行文件
@@ -927,7 +931,9 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ### 发布说明要求
 
-新版本的 Release 说明必须列出推荐 GPU、显存、系统内存、存储空间、默认分离模型和实测音频时长。模型或分块策略变化时，还要记录测试硬件、峰值显存、总耗时和相对上一版本的变化。没有完成实测的项目写“未验证”，不要填写估算值。
+Release 说明用简短的中英文介绍变化和升级方式，只附安装包及 SHA-256 校验文件。详细硬件、模型、测试与故障记录保留在工程文档和 Actions 日志，不作为 Release 附件。未测项目明确保留，不能填写估算值或把 CI 构建说成显卡实跑。
+
+English: Keep release notes brief in both languages and attach only packages and SHA-256 checksums. Hardware, model, test and failure details belong in project documentation and Actions logs. Preserve untested limits; do not invent measurements or equate CI builds with actual GPU inference.
 
 ## 许可证
 

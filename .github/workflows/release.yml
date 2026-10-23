@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Check version, notes and destination
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release_pipeline.py prepare
+
+  contracts:
+    needs: prepare
+    uses: ./.github/workflows/platform-contracts.yml
+    with:
+      source_sha: ${{ github.sha }}
+
+  packages:
+    needs: prepare
+    uses: ./.github/workflows/build-executables.yml
+    with:
+      source_sha: ${{ github.sha }}
+
+  stage:
+    needs: [contracts, packages]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.stage.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Download original packages and verify artifact digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        timeout-minutes: 45
+        with:
+          pattern: AI-RVC-*
+          path: ${{ runner.temp }}/release-packages
+          digest-mismatch: error
+      - name: Verify all volumes and update the unpublished draft
+        id: stage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGED_ARTIFACT_DIRECTORY: ${{ runner.temp }}/release-packages
+        run: python3 tools/release_pipeline.py stage
+
+  images:
+    needs: stage
+    uses: ./.github/workflows/docker.yml
+    with:
+      source_sha: ${{ github.sha }}
+      publish: true
+
+  publish:
+    needs: [stage, images]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify public images, create the exact tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RECEIPT: ${{ needs.stage.outputs.receipt }}
+        run: python3 tools/release_pipeline.py publish

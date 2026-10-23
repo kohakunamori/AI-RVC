@@ -1,9 +1,12 @@
 # Changelog
 
-## 1.6.0 候选版 / Release candidate — 2026-10-23–24
+## 1.6.0 — 2026-10-24
 
 ### 中文
 
+- 增加 `Release` 一条龙工作流：从 `master` 绑定准确提交，依次完成三平台合同、四种便携包、完整回归与资源检查、原始 artifact 和分卷摘要核验、两种容器检查及推送、匿名镜像版本与源码核对，最后创建同一提交的标签并公开发行。构建和 Docker 作业复用现有流程，不依赖工作流令牌发布 Release 后再触发另一条流水线。
+- 发布脚本拒绝失败或跳过的必要作业、错误来源、缺失/损坏的分卷、过期产物、错误镜像版本和冲突标签；公开版本和无关草稿附件不覆盖。上传中断后先核对远端真实摘要，草稿分卷完整校验后才允许发版。增加对应成功与失败回归，交由 Actions 执行。
+- Release 只保留安装包、分卷和 SHA-256 文件；四个旧报告附件在新版原件验证通过后移除，简短中英说明随源码维护。README、容器指南、发布架构与验证范围同步更新。本次最终打包不追加本机测试，以下候选实测不冒充新包的显卡运行结论；主机 WSL2 故障边界保持原记录。
 - 从 TelkNet `dev` 固定提交 `a1116773b55ededc81ab37d088eb81f7e1176e7f` 移植同源音频更新，保持 AI-RVC 独立运行及当前固定官方源码，不增加 TelkNet 服务依赖。
 - 新增整曲 / 纯人声输入选择，配置和处理入口支持 `song` / `vocals`。纯人声跳过分离、去混响、源约束与混音，只导出实际输入及转换两轨；界面隐藏不适用参数，中英文及多轨播放器同步更新。
 - 统一安全检查点加载、真实架构识别与全层校验，支持标准 v1/v2、非 F0、多说话人及 Applio HiFi-GAN / MRF / RefineGAN。RVC、RMVPE 独立遵守原生权重精度，HuBERT 保持固定 FP32；索引保持完整 FP32 向量精确检索。
@@ -19,13 +22,16 @@
 - 草稿工作流改用固定提交的官方 artifact 下载步骤，强制下载摘要检查并设置 45 分钟下载上限、75 分钟作业上限；原 20 分钟内三包完成，7.4 GB Linux GPU 包触发超时，按实测调整时限。暂存继续核对既有构建的准确源码、四种包目录和每个原始分卷。该发布工具调整不改变候选应用产物的源码提交。
 - 修复冻结程序官方 UVR5 路线因旧模块路径缓存崩溃：替换应用包时同步失效这些包在 `inspect` 中的双向文件索引，保留无关依赖缓存及冻结依赖搜索路径。新增真实缓存回归，覆盖命名空间包、普通包和旧代码定位；路径检查解析 Windows 短路径和 macOS 临时目录链接。Windows CPU/CUDA 诊断副本的官方路线各完成 4 条 Float WAV，正式新包另行重建验收。
 - 增补数值、参数、分离完整性、原生精度、纯人声、长音频与干净安装回归，连同草稿暂存和模块缓存验证，本地全量 414 项通过。花丸同一模型与参数完成《Far far away》《梦的光点》《あこがれランララン》《SILENT PAIN》《だから僕は音楽を辞めた》五首全曲；另完成 Rin 整曲、官方 UVR5、本地兼容入口、MCP 与浏览器纯人声实测。两种界面语言、窄屏、播放和原始 WAV 下载均已实际检查。
-- 统一源码、Compose 与 OCI 构建版本为 1.6.0，更新 README、架构图、兼容性、播放器模式及发布准备文档。模型、索引、原曲和试听音频不进入发行源码。来源和量化结果见 `docs/TelkNet同源更新.md`；当前为候选版，四种便携包及两种 Docker 镜像须分别完成本版成品验收后才正式发布。
+- 统一源码、Compose 与 OCI 构建版本为 1.6.0，更新 README、架构图、兼容性、播放器模式及发布准备文档。模型、索引、原曲和试听音频不进入发行源码。来源和量化结果见 `docs/TelkNet同源更新.md`；下面保留候选阶段的实际检查记录，最终发行范围见本节开头。
 - 完成 `5bdcb55` 四种便携包与两种 Docker CI 构建，各通过 414 项回归；四包原始分卷、全部文件、495 个固定源码及 18 个持久模型/配置逐项校验通过。原始产物已保存到草稿，另生成相对 1.5.1 的完整文件和依赖对照；固定源码与模型权重内容不变，三个派生 YAML 改在会话目录生成。
 - Windows CPU/CUDA 和无需 Hyper-V 的 WSL1 Linux CPU 三个原样成品完成默认、官方 UVR5、纯人声三路线，共 39 条有效 Float WAV；全量解码、时长、原始下载 SHA-256、Range 206 和输入未改变检查通过。Windows CUDA 中英文 2/2、Linux CPU 的真实浏览器转换、播放及下载通过。Linux CPU 默认推理后的验证客户端路径映射错误已修正，同一响应和真实输出复验通过；缺失的客户端计时明确留空。两种新版本地 Linux 容器各通过 414 项，UID 1000、只读模型、断网完成三路线，另有 26 条有效 Float WAV。
-- 保留本机 WSL2 冷启动资源故障的真实边界：原丢失数据盘的运行环境已重建，但旧数据未恢复；最后一次 8 GB / 8 虚拟 CPU 诊断仍失败且已撤销。Windows 未重启，其他用户任务未停止。Linux GPU 冻结程序的 CUDA 实跑仍未完成，不把归档、CPU 或已有容器通过混为该包通过；Release 保持草稿，现场与继续步骤保留。
+- 保留本机 WSL2 冷启动资源故障的真实边界：原丢失数据盘的运行环境已重建，但旧数据未恢复；最后一次 8 GB / 8 虚拟 CPU 诊断仍失败且已撤销。Windows 未重启，其他用户任务未停止。早期 Linux GPU 冻结程序的 CUDA 实跑未完成，归档、CPU 或已有容器通过不等于该包通过；当时保持草稿，现场与继续步骤保留。
 
 ### English
 
+- Add a single `Release` workflow pinned to the exact `master` commit: three platform checks, four portable builds, complete regressions/resources, original-artifact and volume digests, both checked container pushes, anonymous image version/revision verification, then the matching tag and public release. Reuse existing build/container workflows without relying on a workflow-token release event to trigger another pipeline.
+- Reject failed/skipped required jobs, wrong sources, missing/corrupt volumes, expired artifacts, mismatched image versions and conflicting tags. Never replace public releases or unrelated draft attachments. After an interrupted upload, inspect the actual remote digest before retrying; publish only the fully verified package set. Add positive and negative regressions for Actions to execute.
+- Attach only packages, archive volumes and SHA-256 files. Remove four legacy report attachments after validating the rebuilt originals and maintain brief bilingual notes with the source. Update README, container instructions, release architecture and validation scope. This final rebuild adds no local runtime tests; earlier candidate evidence is not claimed as GPU execution of the new packages, and the WSL2 limitation remains documented.
 - Port the shared audio updates from TelkNet `dev` commit `a1116773b55ededc81ab37d088eb81f7e1176e7f`. AI-RVC remains standalone and retains its pinned upstream sources.
 - Add `song` and `vocals` inputs across configuration, processing and the bilingual UI. Vocal input skips separation, dereverb, source constraints and mixing, and exports only input and converted vocals. The player and applicable controls follow the selected mode.
 - Share safe checkpoint loading, architecture detection and complete weight validation across standard v1/v2, non-F0, multi-speaker and Applio HiFi-GAN / MRF / RefineGAN models. RVC and RMVPE keep independent native precision; the pinned HuBERT stays FP32, and index retrieval retains exact full FP32 vectors.
@@ -41,10 +47,10 @@
 - Use the commit-pinned official artifact download action with mandatory digest verification, a 45-minute download limit and a 75-minute job limit. Three packages completed within the original 20-minute limit; the 7.4 GB Linux GPU artifact timed out, so the limits follow observed transfer size. Staging still validates the original build commit, all four package directories and every archive volume. This release-tool change does not change the candidate application's source commit.
 - Fix the frozen official UVR5 route crashing on stale module paths. Invalidate both `inspect` file mappings only for replaced application packages, preserving unrelated caches and bundled dependency paths. Regressions exercise actual caches with namespace packages, regular packages and old-code lookup, resolving Windows short paths and macOS temporary-directory links. Windows CPU/CUDA diagnostic copies each produce four valid Float WAV tracks; rebuilt release candidates require separate acceptance.
 - Pass all 414 local regressions for numerical behavior, parameters, separation integrity, native precision, vocal input, long-form conversion, clean installation, draft staging and module caches. Complete five full Hanamaru covers with identical settings: “Far far away”, “梦的光点”, “あこがれランララン”, “SILENT PAIN” and “だから僕は音楽を辞めた”. Also exercise a full Rin cover, official UVR5, the local compatibility path, MCP and browser vocal conversion. Verify both UI languages, mobile layout, playback and original WAV downloads in a real browser.
-- Set source, Compose and OCI build versions to 1.6.0 and update architecture, compatibility, player-mode and release documentation. Exclude model weights, indices, source songs and listening outputs from the source release. See `docs/TelkNet同源更新.md` for provenance and measurements. This is a release candidate; all four portable packages and both Docker images require separate acceptance before public release.
+- Set source, Compose and OCI build versions to 1.6.0 and update architecture, compatibility, player-mode and release documentation. Exclude model weights, indices, source songs and listening outputs from the source release. See `docs/TelkNet同源更新.md` for provenance and measurements. The following candidate records remain historical; the final release scope is described at the start of this section.
 - Complete all four portable builds and both Docker CI builds at `5bdcb55`, each passing 414 regressions. Verify every original archive volume, complete file inventory, all 495 pinned sources and 18 persistent model/configuration files per package. Preserve original artifacts in the draft and record the full file/dependency comparison against 1.5.1; pinned sources and model weights are unchanged, with three derived YAML files moved to session directories.
 - Complete default, official UVR5 and vocal-only routes in the pristine Windows CPU/CUDA and Hyper-V-independent WSL1 Linux CPU apps, yielding 39 valid Float WAV outputs. Full decoding, duration, original-download hashes, Range 206 and unchanged-input checks pass. Real-browser conversion, playback and downloads pass for Linux CPU and Windows CUDA, including both Windows CUDA locales. Correct a Linux CPU client path-mapping error after default inference and revalidate the same actual response/outputs; explicitly leave missing client timing blank. Both rebuilt local Linux containers pass 414 tests and all three offline UID-1000 routes with read-only models, yielding 26 more valid Float WAV outputs.
-- Preserve the unresolved WSL2 cold-start resource failure: the missing-disk runtime was rebuilt without recovering old data, and the final 8 GB / eight-vCPU diagnostic failed and was reverted. Windows was not rebooted and other user tasks were not stopped. Linux GPU frozen CUDA execution remains pending; archive, CPU and container success do not substitute for it. Keep the release unpublished and preserve diagnostic evidence and continuation steps.
+- Preserve the unresolved WSL2 cold-start resource failure: the missing-disk runtime was rebuilt without recovering old data, and the final 8 GB / eight-vCPU diagnostic failed and was reverted. Windows was not rebooted and other user tasks were not stopped. The earlier Linux GPU frozen CUDA run was not completed; archive, CPU and container success do not substitute for it. That candidate stayed unpublished and diagnostic evidence/continuation steps remain preserved.
 
 ## 1.5.1 — 2026-09-06
 

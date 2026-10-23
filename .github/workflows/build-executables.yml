@@ -1,6 +1,11 @@
 name: Build Executables
 
 on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
@@ -114,7 +119,7 @@ jobs:
       if: steps.selection.outputs.should_run == 'true'
       uses: actions/checkout@v7.0.1
       with:
-        ref: ${{ inputs.tag || github.ref }}
+        ref: ${{ inputs.source_sha || inputs.tag || github.ref }}
 
     - name: Validate release destination before building
       if: steps.selection.outputs.should_run == 'true' && (github.event_name == 'push' || inputs.publish)

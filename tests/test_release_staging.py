@@ -69,9 +69,10 @@ class ReleaseStagingTests(unittest.TestCase):
 
     def test_success_stages_originals_and_is_idempotent(self):
         self.execute()
-        self.assertEqual(len(self.uploaded), 9)
+        self.assertEqual(len(self.uploaded), 8)
         self.execute()
-        self.assertEqual(len(self.uploaded), 9)
+        self.assertEqual(len(self.uploaded), 8)
+        self.assertNotIn("DRAFT-ASSET-PROVENANCE.json", self.uploaded)
         self.assertTrue(self.release["draft"])
 
     def test_pre_downloaded_artifacts_use_the_same_integrity_checks(self):
@@ -79,7 +80,7 @@ class ReleaseStagingTests(unittest.TestCase):
             self.gh("run", "download", "123", "--dir", directory)
             self.execute()
             self.assertEqual(self.downloads, 1)
-            self.assertEqual(len(self.uploaded), 9)
+            self.assertEqual(len(self.uploaded), 8)
 
     def test_pre_downloaded_directory_rejects_extra_packages(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, STAGED_ARTIFACT_DIRECTORY=directory):

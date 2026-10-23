@@ -1,6 +1,11 @@
 name: Platform Contracts
 
 on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
   push:
     branches: [master]
   pull_request:
@@ -28,6 +33,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - uses: actions/setup-python@v7.0.0
         with:

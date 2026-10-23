@@ -27,6 +27,37 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def verified_package_files(root: Path):
+    """Validate the complete four-package download before any release mutation."""
+    expected = {f"AI-RVC-{platform}-{variant}" for platform in ("Windows", "Linux") for variant in ("CPU", "GPU")}
+    if not root.is_dir() or {item.name for item in root.iterdir() if item.is_dir()} != expected:
+        raise RuntimeError("The download directory must contain exactly the four expected artifact directories")
+    verified = {}
+    uploads = []
+    for name in sorted(expected):
+        directory = root / name
+        checksum = directory / f"{name}-Portable.SHA256SUMS"
+        entries = {}
+        for line in checksum.read_text(encoding="utf-8").splitlines():
+            match = re.fullmatch(r"([0-9a-f]{64})\s+\*?(?:\./)?([^/\\]+)", line)
+            if not match:
+                raise RuntimeError(f"Invalid checksum line in {checksum.name}")
+            digest, filename = match.groups()
+            if not re.fullmatch(re.escape(name + "-Portable") + r"(?:\.7z\.[0-9]{3}|\.tar\.gz(?:\.part[a-z]{2})?)", filename):
+                raise RuntimeError(f"Unexpected archive name: {filename}")
+            path = directory / filename
+            if filename in entries or not path.is_file() or path.is_symlink() or sha256(path) != digest:
+                raise RuntimeError(f"Duplicate, missing or mismatched archive: {filename}")
+            entries[filename] = {"sha256": digest, "bytes": path.stat().st_size}
+        if not entries or {path.name for path in directory.iterdir()} != set(entries) | {checksum.name}:
+            raise RuntimeError(f"Unexpected or unlisted contents in {name}")
+        entries[checksum.name] = {"sha256": sha256(checksum), "bytes": checksum.stat().st_size}
+        verified[name] = entries
+        uploads.extend(directory / filename for filename in sorted(entries))
+        print(f"Verified {name}: {len(entries) - 1} archive volumes", flush=True)
+    return verified, uploads
+
+
 def main() -> None:
     repository = os.environ["GITHUB_REPOSITORY"]
     run_id = os.environ["SOURCE_RUN_ID"]
@@ -83,29 +114,7 @@ def main() -> None:
                 raise RuntimeError("The download directory must contain exactly the four expected artifact directories")
         else:
             gh("run", "download", run_id, "--repo", repository, "--dir", str(root))
-        verified = {}
-        uploads = []
-        for name in sorted(expected):
-            directory = root / name
-            checksum = directory / f"{name}-Portable.SHA256SUMS"
-            entries = {}
-            for line in checksum.read_text(encoding="utf-8").splitlines():
-                match = re.fullmatch(r"([0-9a-f]{64})\s+\*?(?:\./)?([^/\\]+)", line)
-                if not match:
-                    raise RuntimeError(f"Invalid checksum line in {checksum.name}")
-                digest, filename = match.groups()
-                if not re.fullmatch(re.escape(name + "-Portable") + r"(?:\.7z\.[0-9]{3}|\.tar\.gz(?:\.part[a-z]{2})?)", filename):
-                    raise RuntimeError(f"Unexpected archive name: {filename}")
-                path = directory / filename
-                if filename in entries or sha256(path) != digest:
-                    raise RuntimeError(f"Duplicate or mismatched archive: {filename}")
-                entries[filename] = {"sha256": digest, "bytes": path.stat().st_size}
-            if not entries or {path.name for path in directory.iterdir()} != set(entries) | {checksum.name}:
-                raise RuntimeError(f"Unexpected or unlisted contents in {name}")
-            entries[checksum.name] = {"sha256": sha256(checksum), "bytes": checksum.stat().st_size}
-            verified[name] = entries
-            uploads.extend(directory / filename for filename in sorted(entries))
-            print(f"Verified {name}: {len(entries) - 1} archive volumes", flush=True)
+        verified, uploads = verified_package_files(root)
 
         provenance = root / "DRAFT-ASSET-PROVENANCE.json"
         provenance.write_text(json.dumps({
@@ -113,7 +122,7 @@ def main() -> None:
             "build_url": run["html_url"], "artifacts": verified,
             "scope": "Original CI archives and checksums; runtime acceptance is recorded separately. Not published.",
         }, indent=2) + "\n", encoding="utf-8")
-        uploads.append(provenance)
+        # Provenance is an internal check, not a user-facing release attachment.
         for path in uploads:
             existing = {asset["name"]: asset for asset in draft()["assets"]}
             if path.name in existing:

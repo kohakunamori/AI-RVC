@@ -97,5 +97,7 @@ outputs/
 !/docs/Docker使用指南.md
 !/docs/发布准备.md
 !/docs/TelkNet同源更新.md
+!/docs/releases/
+!/docs/releases/*.md
 /docker/secrets/
 /docker/data/
