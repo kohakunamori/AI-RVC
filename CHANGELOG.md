@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.0 候选版 / Release candidate — 2026-10-23
+## 1.6.0 候选版 / Release candidate — 2026-10-23–24
 
 ### 中文
 
@@ -20,6 +20,9 @@
 - 修复冻结程序官方 UVR5 路线因旧模块路径缓存崩溃：替换应用包时同步失效这些包在 `inspect` 中的双向文件索引，保留无关依赖缓存及冻结依赖搜索路径。新增真实缓存回归，覆盖命名空间包、普通包和旧代码定位；路径检查解析 Windows 短路径和 macOS 临时目录链接。Windows CPU/CUDA 诊断副本的官方路线各完成 4 条 Float WAV，正式新包另行重建验收。
 - 增补数值、参数、分离完整性、原生精度、纯人声、长音频与干净安装回归，连同草稿暂存和模块缓存验证，本地全量 414 项通过。花丸同一模型与参数完成《Far far away》《梦的光点》《あこがれランララン》《SILENT PAIN》《だから僕は音楽を辞めた》五首全曲；另完成 Rin 整曲、官方 UVR5、本地兼容入口、MCP 与浏览器纯人声实测。两种界面语言、窄屏、播放和原始 WAV 下载均已实际检查。
 - 统一源码、Compose 与 OCI 构建版本为 1.6.0，更新 README、架构图、兼容性、播放器模式及发布准备文档。模型、索引、原曲和试听音频不进入发行源码。来源和量化结果见 `docs/TelkNet同源更新.md`；当前为候选版，四种便携包及两种 Docker 镜像须分别完成本版成品验收后才正式发布。
+- 完成 `5bdcb55` 四种便携包与两种 Docker CI 构建，各通过 414 项回归；四包原始分卷、全部文件、495 个固定源码及 18 个持久模型/配置逐项校验通过。原始产物已保存到草稿，另生成相对 1.5.1 的完整文件和依赖对照；固定源码与模型权重内容不变，三个派生 YAML 改在会话目录生成。
+- Windows CPU/CUDA 和无需 Hyper-V 的 WSL1 Linux CPU 三个原样成品完成默认、官方 UVR5、纯人声三路线，共 39 条有效 Float WAV；全量解码、时长、原始下载 SHA-256、Range 206 和输入未改变检查通过。Windows CUDA 中英文 2/2、Linux CPU 的真实浏览器转换、播放及下载通过。Linux CPU 默认推理后的验证客户端路径映射错误已修正，同一响应和真实输出复验通过；缺失的客户端计时明确留空。两种新版本地 Linux 容器各通过 414 项，UID 1000、只读模型、断网完成三路线，另有 26 条有效 Float WAV。
+- 保留本机 WSL2 冷启动资源故障的真实边界：原丢失数据盘的运行环境已重建，但旧数据未恢复；最后一次 8 GB / 8 虚拟 CPU 诊断仍失败且已撤销。Windows 未重启，其他用户任务未停止。Linux GPU 冻结程序的 CUDA 实跑仍未完成，不把归档、CPU 或已有容器通过混为该包通过；Release 保持草稿，现场与继续步骤保留。
 
 ### English
 
@@ -39,6 +42,9 @@
 - Fix the frozen official UVR5 route crashing on stale module paths. Invalidate both `inspect` file mappings only for replaced application packages, preserving unrelated caches and bundled dependency paths. Regressions exercise actual caches with namespace packages, regular packages and old-code lookup, resolving Windows short paths and macOS temporary-directory links. Windows CPU/CUDA diagnostic copies each produce four valid Float WAV tracks; rebuilt release candidates require separate acceptance.
 - Pass all 414 local regressions for numerical behavior, parameters, separation integrity, native precision, vocal input, long-form conversion, clean installation, draft staging and module caches. Complete five full Hanamaru covers with identical settings: “Far far away”, “梦的光点”, “あこがれランララン”, “SILENT PAIN” and “だから僕は音楽を辞めた”. Also exercise a full Rin cover, official UVR5, the local compatibility path, MCP and browser vocal conversion. Verify both UI languages, mobile layout, playback and original WAV downloads in a real browser.
 - Set source, Compose and OCI build versions to 1.6.0 and update architecture, compatibility, player-mode and release documentation. Exclude model weights, indices, source songs and listening outputs from the source release. See `docs/TelkNet同源更新.md` for provenance and measurements. This is a release candidate; all four portable packages and both Docker images require separate acceptance before public release.
+- Complete all four portable builds and both Docker CI builds at `5bdcb55`, each passing 414 regressions. Verify every original archive volume, complete file inventory, all 495 pinned sources and 18 persistent model/configuration files per package. Preserve original artifacts in the draft and record the full file/dependency comparison against 1.5.1; pinned sources and model weights are unchanged, with three derived YAML files moved to session directories.
+- Complete default, official UVR5 and vocal-only routes in the pristine Windows CPU/CUDA and Hyper-V-independent WSL1 Linux CPU apps, yielding 39 valid Float WAV outputs. Full decoding, duration, original-download hashes, Range 206 and unchanged-input checks pass. Real-browser conversion, playback and downloads pass for Linux CPU and Windows CUDA, including both Windows CUDA locales. Correct a Linux CPU client path-mapping error after default inference and revalidate the same actual response/outputs; explicitly leave missing client timing blank. Both rebuilt local Linux containers pass 414 tests and all three offline UID-1000 routes with read-only models, yielding 26 more valid Float WAV outputs.
+- Preserve the unresolved WSL2 cold-start resource failure: the missing-disk runtime was rebuilt without recovering old data, and the final 8 GB / eight-vCPU diagnostic failed and was reverted. Windows was not rebooted and other user tasks were not stopped. Linux GPU frozen CUDA execution remains pending; archive, CPU and container success do not substitute for it. Keep the release unpublished and preserve diagnostic evidence and continuation steps.
 
 ## 1.5.1 — 2026-09-06
 
