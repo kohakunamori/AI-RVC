@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 import os
 import sys
@@ -23,7 +24,12 @@ from lib.console_i18n import console_print as print
 from lib.device import get_device
 from lib.upstream_imports import activate_upstream_packages
 from lib.upstream_audio_output import preserve_float_vc_output, preserve_unvoiced_f0
-from infer.contracts import inspect_checkpoint, validate_state_dict, read_index, retrieve_features
+from infer.contracts import inspect_checkpoint, read_index, retrieve_features
+from infer.rvc_checkpoint import (
+    safe_load_rvc_checkpoint, build_rvc_synthesizer, checkpoint_weight_dtypes,
+    checkpoint_storage_dtypes, select_rvc_runtime_precision,
+)
+from infer.lib.rmvpe import RMVPE
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,7 +86,9 @@ def save_vc_result(result, output_path: Path) -> None:
     with tempfile.NamedTemporaryFile(dir=output_path.parent, suffix=".wav", delete=False) as stream:
         temporary = Path(stream.name)
     try:
-        sf.write(temporary, audio, int(sr), subtype="FLOAT" if audio.dtype.kind == "f" else "PCM_16")
+        if audio.dtype.kind != "f":
+            raise RuntimeError("官方 VC 必须返回未量化的浮点音频")
+        sf.write(temporary, audio, int(sr), subtype="DOUBLE" if audio.dtype == np.float64 else "FLOAT")
         os.replace(temporary, output_path)
     finally:
         if temporary.exists():
@@ -93,6 +101,22 @@ def main() -> int:
     official_root = Path(args.official_root).resolve()
     if not (official_root / "infer" / "vc" / "modules.py").is_file():
         raise FileNotFoundError(f"新版官方 VC 模块不存在: {official_root}")
+
+    model_path = Path(os.environ.get("weight_root", official_root / "assets" / "weights")) / args.sid
+    checkpoint = safe_load_rvc_checkpoint(model_path)
+    precision = select_rvc_runtime_precision(checkpoint_weight_dtypes(checkpoint), selected_device)
+    model, checkpoint, compatibility = build_rvc_synthesizer(
+        checkpoint, model_label=str(model_path), is_half=precision.is_half,
+        runtime_dtype=precision.runtime_dtype,
+    )
+    contract = inspect_checkpoint(checkpoint, args.sid)
+    rmvpe_path = Path(os.environ.get("rmvpe_root", official_root / "assets" / "rmvpe")) / "rmvpe.pt"
+    rmvpe_precision = None
+    if contract.uses_f0 and args.f0_method == "rmvpe":
+        rmvpe_precision = select_rvc_runtime_precision(checkpoint_storage_dtypes(rmvpe_path), selected_device)
+    torch.set_float32_matmul_precision("highest")
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
@@ -108,18 +132,38 @@ def main() -> int:
     import configs.config as config_module  # type: ignore
     config = configure_selected_device(config_module, selected_device)
     from infer.vc.modules import VC  # type: ignore
+    from infer.vc.pipeline import Pipeline  # type: ignore
+    from infer.hubert import load_hubert_model  # type: ignore
     vc = VC(config)
-    vc.get_vc(args.sid)
-    contract = inspect_checkpoint(vc.cpt, args.sid)
-    validate_state_dict(vc.net_g, vc.cpt["weight"])
+    vc.cpt = checkpoint
+    vc.tgt_sr = contract.sample_rate
+    vc.if_f0 = int(contract.uses_f0)
+    vc.version = contract.version
+    vc.n_spk = contract.speaker_count
+    vc.net_g = model.to(selected_device, dtype=precision.torch_dtype).eval()
+    # The pinned Transformers HuBERT is FP32; its precision is independent of RVC.
+    feature_settings = copy.copy(config)
+    feature_settings.is_half = False
+    feature_settings.dtype = torch.float32
+    vc.hubert_model = load_hubert_model(selected_device, is_half=False)
+    vc.pipeline = Pipeline(vc.tgt_sr, feature_settings)
+    vc.pipeline.rvc_dtype = precision.torch_dtype
+    if rmvpe_precision is not None:
+        vc.pipeline.model_rmvpe = RMVPE(
+            str(rmvpe_path), is_half=rmvpe_precision.is_half, device=selected_device,
+            runtime_dtype=rmvpe_precision.runtime_dtype,
+        )
+    logging.info("RVC architecture=%s precision=%s; HuBERT=FP32; RMVPE=%s",
+                 compatibility.runtime_architecture, precision.runtime_dtype,
+                 rmvpe_precision.runtime_dtype if rmvpe_precision else "unused")
     if contract.uses_f0:
-        preserve_unvoiced_f0(vc.pipeline)
+        preserve_unvoiced_f0(vc.pipeline, verify_boundaries=True)
     if args.index_rate > 0:
         preserve_float_vc_output(vc.pipeline,
             index_loader=partial(read_index, feature_dim=contract.feature_dim, min_vectors=8),
-            index_retriever=retrieve_features)
+            index_retriever=retrieve_features, align_context=True)
     else:
-        preserve_float_vc_output(vc.pipeline)
+        preserve_float_vc_output(vc.pipeline, align_context=True)
 
     speaker_count = int(vc.cpt["weight"]["emb_g.weight"].shape[0])
     if not 0 <= args.speaker_id < speaker_count:

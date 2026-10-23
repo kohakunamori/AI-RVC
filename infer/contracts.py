@@ -41,6 +41,10 @@ class ModelContract:
 def inspect_checkpoint(checkpoint: Mapping, label: str = "RVC 模型") -> ModelContract:
     if not isinstance(checkpoint, Mapping):
         raise ValueError(f"{label} 不是 RVC 推理权重字典")
+    from infer.rvc_checkpoint import prepare_rvc_checkpoint
+    checkpoint, _ = prepare_rvc_checkpoint(
+        checkpoint, model_label=label, validate_structure=False, verify_finite=False,
+    )
     version = inspect_rvc_model_version(checkpoint, label)
     weights = checkpoint.get("weight")
     if not isinstance(weights, Mapping):
@@ -58,8 +62,8 @@ def inspect_checkpoint(checkpoint: Mapping, label: str = "RVC 模型") -> ModelC
     sample_rate = config[-1]
     if isinstance(sample_rate, str):
         sample_rate = {"32k": 32000, "40k": 40000, "48k": 48000}.get(sample_rate)
-    if sample_rate not in (32000, 40000, 48000):
-        raise ValueError(f"{label} 不支持采样率 {config[-1]!r}；支持原生 32/40/48 kHz")
+    if not 16000 <= sample_rate <= 192000:
+        raise ValueError(f"{label} 不支持采样率 {config[-1]!r}")
     f0 = checkpoint.get("f0", 1)
     if type(f0) not in (bool, int) or f0 not in (0, 1):
         raise ValueError(f"{label} 的 f0 标志必须为 0 或 1")

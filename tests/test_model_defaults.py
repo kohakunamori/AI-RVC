@@ -237,6 +237,7 @@ class ModelDefaultTests(unittest.TestCase):
         class FakeSeparator:
             def __init__(self, model_file_dir: str):
                 self.model_file_dir = model_file_dir
+                self.output_dir = str(Path(model_file_dir).parent / "output")
 
             @staticmethod
             def download_model_files(_model_filename):
@@ -350,7 +351,11 @@ class ModelDefaultTests(unittest.TestCase):
                             "  chunk_size: 100",
                             "  sample_rate: 10",
                             "model:",
+                            "  num_stems: 1",
                             f"  stft_hop_length: {index + 1}",
+                            "training:",
+                            "  target_instrument: vocals",
+                            "  instruments: [vocals, other]",
                             "inference:",
                             f"  dim_t: {index + 4}",
                         ]
@@ -358,10 +363,11 @@ class ModelDefaultTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
-            duration = separator._get_karaoke_min_duration_seconds(
-                str(model_dir),
-                separator.KARAOKE_DEFAULT_MODEL,
-            )
+            with patch.object(separator, "_download_hf_file", side_effect=lambda repo, filename, directory: str(Path(directory) / filename)):
+                duration = separator._get_karaoke_min_duration_seconds(
+                    str(model_dir),
+                    separator.KARAOKE_DEFAULT_MODEL,
+                )
 
             self.assertEqual(duration, 2.4)
 

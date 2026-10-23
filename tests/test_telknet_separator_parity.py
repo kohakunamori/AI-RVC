@@ -49,7 +49,7 @@ class TelkNetSeparatorParityTests(unittest.TestCase):
             ):
                 instance.separate(str(source_path), str(tmp_path))
 
-    def test_karaoke_rejects_apparently_reversed_stems_instead_of_swapping(self):
+    def test_karaoke_preserves_silent_lead_in_instrumental_sections(self):
         from infer import separator
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -71,9 +71,10 @@ class TelkNetSeparatorParityTests(unittest.TestCase):
             with (
                 patch.object(instance, "load_model", return_value=None),
                 patch.object(separator, "_get_karaoke_min_duration_seconds", return_value=0.0),
-                self.assertRaisesRegex(RuntimeError, "输出疑似反转"),
             ):
-                instance.separate(str(source_path), str(tmp_path))
+                lead, second = instance.separate(str(source_path), str(tmp_path))
+            self.assertFalse(np.any(sf.read(lead)[0]))
+            self.assertTrue(np.any(sf.read(second)[0]))
 
     def test_backing_vocals_are_vocal_mix_minus_lead(self):
         sys.modules.setdefault("faiss", types.ModuleType("faiss"))

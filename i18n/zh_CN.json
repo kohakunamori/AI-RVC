@@ -7,7 +7,7 @@
         "settings": "设置"
     },
     "ui": {
-        "cover_usage": "上传歌曲并选择角色，将主唱转换为所选音色，生成翻唱和分轨音频。\n\n1. 首次使用时，在「下载角色模型」中下载模型，或导入自己的模型。\n2. 上传 MP3、WAV 或 FLAC 歌曲。\n3. 选择角色，点击「开始翻唱」。\n\n首次使用的分离模型需要下载，进度会显示在运行日志中。",
+        "cover_usage": "上传歌曲或人声，选择角色，将声音转换为所选音色。\n\n1. 首次使用时，在「下载角色模型」中下载模型，或导入自己的模型。\n2. 选择「整曲翻唱」或「纯人声转换」，上传 MP3、WAV 或 FLAC 音频。\n3. 选择角色，点击「开始翻唱」。\n\n整曲模式会分离人声、伴奏并混音；纯人声模式导出输入人声与转换人声。首次使用的模型需要下载，进度显示在运行日志中。",
         "series_filter": "作品/分类",
         "keyword_search": "关键词搜索",
         "keyword_placeholder": "输入角色名/作品名",
@@ -76,9 +76,9 @@
         "song_cover": "AI 歌曲翻唱",
         "cover_description": "上传歌曲并选择角色，转换主唱音色并生成翻唱。",
         "automatic_cover_settings": "默认处理设置",
-        "automatic_cover_settings_info": "上传歌曲并选择角色后即可开始。需要调整效果时，展开「手动调整」。",
+        "automatic_cover_settings_info": "选择输入类型、上传音频并选择角色后即可开始。需要调整效果时，展开「手动调整」。",
         "manual_cover_settings": "手动调整（可选）",
-        "upload_song": "上传歌曲",
+        "upload_song": "上传音频",
         "input_song": "输入歌曲 (支持 MP3/WAV/FLAC)",
         "select_character": "选择角色",
         "character": "角色",
@@ -132,10 +132,16 @@
         "vc_preprocess_status": "处理流程",
         "vc_preprocess_status_info": "显示已选择的处理步骤；模型状态可在「模型管理」中检查。",
         "vc_pipeline_mode": "转换方式",
-        "vc_pipeline_mode_info": "标准翻唱支持和声分离及人声后处理；官方 RVC 路线使用 UVR5 分离，不启用这些处理。",
+        "vc_pipeline_mode_info": "整曲模式下，标准翻唱支持和声分离及人声后处理；官方路线使用 UVR5。纯人声模式直接转换音色。",
         "vc_pipeline_mode_current": "标准翻唱（推荐）",
         "vc_pipeline_mode_official": "官方 RVC 路线",
-        "processing_details": "模型与运行详情"
+        "processing_details": "模型与运行详情",
+        "input_mode": "输入类型",
+        "input_mode_song": "整曲翻唱",
+        "input_mode_vocals": "纯人声转换",
+        "input_audio": "歌曲或人声音频",
+        "input_mode_info": "纯人声直接转换音色，输出输入人声和转换人声；整曲会分离伴奏并混音。",
+        "input_vocals": "输入人声"
     },
     "models": {
         "base_models": "基础模型",
@@ -226,7 +232,8 @@
         "converting_vocals": "正在转换人声...",
         "mixing_audio": "正在混音...",
         "invalid_ui_number": "{field}必须是 {minimum}–{maximum} 之间的数字。",
-        "invalid_ui_integer": "{field}必须是 {minimum}–{maximum} 之间的整数。"
+        "invalid_ui_integer": "{field}必须是 {minimum}–{maximum} 之间的整数。",
+        "vocals_complete_status": "✅ 人声转换完成，已导出输入人声与转换人声。"
     },
     "character_details": {
         "compatibility": "兼容性检查",
@@ -277,7 +284,8 @@
         "auto_route_missing_title": "去混响组件无法导入",
         "auto_route_missing_reason": "请检查 audio-separator 安装情况。",
         "configured_route_flow": "分离模型：{separator}；和声分离：{karaoke} → Stereo De-Reverb 22.5050 → RVC 音色转换 → 混音",
-        "local_configured_route_flow": "分离模型：{separator}；和声分离：{karaoke} → Stereo De-Reverb 22.5050 → 本地 RVC 音色转换 → 人声后处理 → 混音"
+        "local_configured_route_flow": "分离模型：{separator}；和声分离：{karaoke} → Stereo De-Reverb 22.5050 → 本地 RVC 音色转换 → 人声后处理 → 混音",
+        "vocals_route": "纯人声转换\n输入人声 → RVC → 转换人声\n保留音高、索引、说话人、保护与响度参数。跳过分离、去混响和成品混音。"
     },
     "device_info": {
         "pytorch_version": "PyTorch 版本: {version}",
@@ -338,7 +346,9 @@
         "errorDetails": "错误详情",
         "waveformHttpFailed": "波形音频加载失败（HTTP {status}）",
         "waveformDataInvalid": "波形数据缺少采样点",
-        "mediaTrackFailed": "{name}加载失败（错误代码 {code}）"
+        "mediaTrackFailed": "{name}加载失败（错误代码 {code}）",
+        "vocalsDescription": "直接试听转换人声，也可加入输入人声进行对照。",
+        "audioStemInputVocals": "输入人声"
     },
     "accessibility": {
         "upload": "上传文件",

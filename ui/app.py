@@ -915,6 +915,7 @@ def process_cover(
     reverb_amount: float,
     rms_mix_rate: float,
     backing_mix: float,
+    input_mode: str = "song",
     progress=gr.Progress()
 ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], str]:
     """
@@ -1017,6 +1018,7 @@ def process_cover(
         # 执行翻唱
         result = pipeline.process(
             input_audio=audio_path,
+            input_mode=input_mode,
             model_path=model_info["model_path"],
             index_path=model_info.get("index_path"),
             pitch_shift=pitch_shift,
@@ -1052,7 +1054,7 @@ def process_cover(
             model_display_name=get_character_filename_display(char_meta, resolved_name),
             output_name_suffixes={
                 "cover": t("final_cover", "cover"),
-                "vocals": re.sub(r"\s*[（(][^）)]*[）)]\s*$", "", t("original_vocals", "cover")),
+                "vocals": re.sub(r"\s*[（(][^）)]*[）)]\s*$", "", t("input_vocals" if input_mode == "vocals" else "original_vocals", "cover")),
                 "converted_vocals": t("converted_vocals", "cover"),
                 "accompaniment": t("accompaniment", "cover"),
                 "accompaniment_without_harmony": t(
@@ -1077,8 +1079,8 @@ def process_cover(
             if result.get(output_key):
                 result[output_key] = normalize_download_output_path(result[output_key])
 
-        status_msg = t("cover_complete_status", "messages")
-        status_msg += f"\n{get_cover_vc_route_status(vc_pipeline_mode, use_official).splitlines()[0]}"
+        status_msg = t("vocals_complete_status" if input_mode == "vocals" else "cover_complete_status", "messages")
+        status_msg += f"\n{get_cover_vc_route_status(vc_pipeline_mode, use_official, input_mode=input_mode).splitlines()[0]}"
         if char_meta.get("version_label"):
             status_msg += "\n" + tf("model_version_status", "messages", value=char_meta["version_label"])
         if char_meta.get("continuity"):
@@ -1089,12 +1091,12 @@ def process_cover(
             status_msg += "\n" + tf("all_files_dir_status", "messages", value=result["all_files_dir"])
 
         return (
-            result["cover"],
+            result.get("cover"),
             result["converted_vocals"],
             result.get("vocals"),
             result.get("lead_vocals"),
             result.get("backing_vocals"),
-            result["accompaniment"],
+            result.get("accompaniment"),
             result.get("accompaniment_without_harmony"),
             status_msg
         )
@@ -1166,6 +1168,7 @@ def process_cover_with_downloads(
     reverb_amount: float,
     rms_mix_rate: float,
     backing_mix: float,
+    input_mode: str = "song",
     progress=gr.Progress()
 ) -> Tuple[
     Optional[str],
@@ -1208,6 +1211,7 @@ def process_cover_with_downloads(
         reverb_amount,
         rms_mix_rate,
         backing_mix,
+        input_mode=input_mode,
         progress=progress,
     )
     return (
@@ -1270,8 +1274,11 @@ def get_cover_vc_route_status(
     vc_pipeline_mode: Optional[str] = None,
     use_official: Optional[bool] = None,
     karaoke_separation: Optional[bool] = None,
+    input_mode: str = "song",
 ) -> str:
     """Return the active VC route shown in the cover UI."""
+    if input_mode == "vocals":
+        return t("vocals_route", "route_status")
     from infer.separator import ROFORMER_DEREVERB_DEFAULT_MODEL, check_roformer_available
 
     cover_cfg = config.get("cover", {})
@@ -2474,8 +2481,14 @@ def create_ui() -> gr.Blocks:
                     # 左侧：输入和角色选择
                     with gr.Column(scale=1):
                         gr.Markdown(f"#### 📁 {ui_text('upload_song', 'cover')}")
+                        cover_input_mode = gr.Radio(
+                            label=ui_text("input_mode", "cover"),
+                            choices=[(t("input_mode_song", "cover"), "song"), (t("input_mode_vocals", "cover"), "vocals")],
+                            value=config.get("cover", {}).get("input_mode", "song"),
+                            info=ui_text("input_mode_info", "cover"),
+                        )
                         cover_input_audio = gr.Audio(
-                            label=ui_text("input_song", "cover"),
+                            label=ui_text("input_audio", "cover"),
                             type="filepath"
                         )
 
@@ -2653,7 +2666,7 @@ def create_ui() -> gr.Blocks:
                                 info=ui_text("speaker_id_info", "cover"),
                             )
 
-                            gr.Markdown(f"#### 🎚️ {ui_text('mix_settings', 'cover')}")
+                            cover_mix_heading = gr.Markdown(f"#### 🎚️ {ui_text('mix_settings', 'cover')}")
                             cover_karaoke = gr.Checkbox(
                                 label=ui_text("karaoke_separation", "cover"),
                                 value=bool(auto_settings["karaoke_separation"]),
@@ -2665,7 +2678,7 @@ def create_ui() -> gr.Blocks:
                                 info=ui_text("karaoke_merge_backing_info", "cover")
                             )
 
-                            gr.Markdown(ui_text("fixed_dereverb_info", "cover"))
+                            cover_dereverb_info = gr.Markdown(ui_text("fixed_dereverb_info", "cover"))
 
                             cover_source_constraint_mode = gr.Dropdown(
                                 label=ui_text("source_constraint_mode", "cover"),
@@ -2806,7 +2819,7 @@ def create_ui() -> gr.Blocks:
                                 interactive=False
                             )
                             cover_original_vocals_download_btn = gr.DownloadButton(
-                                label=_cover_download_label(t("original_vocals", "cover")),
+                            label=_cover_download_label(t("original_vocals", "cover")),
                                 value=None,
                                 visible=False,
                                 size="sm",
@@ -3014,8 +3027,8 @@ def create_ui() -> gr.Blocks:
                     outputs=[mature_deecho_status]
                 )
                 mature_deecho_check_btn.click(
-                    fn=lambda mode, karaoke: get_cover_vc_route_status(mode, karaoke_separation=karaoke),
-                    inputs=[cover_vc_pipeline_mode, cover_karaoke],
+                    fn=lambda mode, karaoke, input_mode: get_cover_vc_route_status(mode, karaoke_separation=karaoke, input_mode=input_mode),
+                    inputs=[cover_vc_pipeline_mode, cover_karaoke, cover_input_mode],
                     outputs=[cover_vc_route_status]
                 )
 
@@ -3024,20 +3037,20 @@ def create_ui() -> gr.Blocks:
                     outputs=[mature_deecho_status]
                 )
                 mature_deecho_download_btn.click(
-                    fn=lambda mode, karaoke: get_cover_vc_route_status(mode, karaoke_separation=karaoke),
-                    inputs=[cover_vc_pipeline_mode, cover_karaoke],
+                    fn=lambda mode, karaoke, input_mode: get_cover_vc_route_status(mode, karaoke_separation=karaoke, input_mode=input_mode),
+                    inputs=[cover_vc_pipeline_mode, cover_karaoke, cover_input_mode],
                     outputs=[cover_vc_route_status]
                 )
 
 
                 cover_vc_pipeline_mode.input(
-                    fn=lambda mode, karaoke: get_cover_vc_route_status(mode, karaoke_separation=karaoke),
-                    inputs=[cover_vc_pipeline_mode, cover_karaoke],
+                    fn=lambda mode, karaoke, input_mode: get_cover_vc_route_status(mode, karaoke_separation=karaoke, input_mode=input_mode),
+                    inputs=[cover_vc_pipeline_mode, cover_karaoke, cover_input_mode],
                     outputs=[cover_vc_route_status]
                 )
                 cover_karaoke.input(
-                    fn=lambda mode, karaoke: get_cover_vc_route_status(mode, karaoke_separation=karaoke),
-                    inputs=[cover_vc_pipeline_mode, cover_karaoke], outputs=[cover_vc_route_status],
+                    fn=lambda mode, karaoke, input_mode: get_cover_vc_route_status(mode, karaoke_separation=karaoke, input_mode=input_mode),
+                    inputs=[cover_vc_pipeline_mode, cover_karaoke, cover_input_mode], outputs=[cover_vc_route_status],
                 )
                 cover_vc_pipeline_mode.input(
                     fn=update_route_controls,
@@ -3053,6 +3066,19 @@ def create_ui() -> gr.Blocks:
                     inputs=[cover_vc_pipeline_mode, cover_karaoke, cover_source_constraint_mode, cover_karaoke_merge_backing],
                     outputs=[cover_karaoke, cover_karaoke_merge_backing, cover_source_constraint_mode],
                 )
+
+                song_controls = [cover_mix_heading, cover_karaoke, cover_karaoke_merge_backing,
+                                 cover_dereverb_info, cover_source_constraint_mode, cover_mix_preset,
+                                 cover_vocals_volume, cover_accompaniment_volume, cover_reverb, cover_backing_mix]
+                def update_input_mode(input_mode, mode, karaoke):
+                    return (*[gr.update(visible=input_mode == "song") for _ in song_controls],
+                            get_cover_vc_route_status(mode, karaoke_separation=karaoke, input_mode=input_mode))
+                cover_input_mode.input(fn=update_input_mode,
+                    inputs=[cover_input_mode, cover_vc_pipeline_mode, cover_karaoke],
+                    outputs=[*song_controls, cover_vc_route_status])
+                app.load(fn=update_input_mode,
+                    inputs=[cover_input_mode, cover_vc_pipeline_mode, cover_karaoke],
+                    outputs=[*song_controls, cover_vc_route_status])
 
                 cover_event = cover_btn.click(
                     fn=process_cover_with_downloads,
@@ -3072,6 +3098,7 @@ def create_ui() -> gr.Blocks:
                         cover_reverb,
                         cover_rms_mix_rate,
                         cover_backing_mix,
+                        cover_input_mode,
                     ],
                     outputs=[
                         cover_output,
@@ -3195,7 +3222,7 @@ def create_ui() -> gr.Blocks:
 
 
         def change_language(choice, series, keyword, character, available_series, available_keyword, available_character,
-                            source_mode, pipeline_mode, mix_preset, karaoke):
+                            source_mode, pipeline_mode, mix_preset, karaoke, input_mode):
             old = i18n
             def translate_option(value, keys, section='cover'):
                 key = next((key for key in keys if old[section][key] == value), None)
@@ -3209,7 +3236,7 @@ def create_ui() -> gr.Blocks:
             pipeline_choices, pipeline_labels = get_vc_pipeline_mode_option_maps()
             presets, _ = get_cover_mix_presets()
             preset = translate_option(mix_preset, ['mix_preset_universal','mix_preset_vocal','mix_preset_accompaniment','mix_preset_live'])
-            dynamic_updates = (status,
+            dynamic_updates = (gr.update(choices=[(t("input_mode_song", "cover"), "song"), (t("input_mode_vocals", "cover"), "vocals")], value=input_mode), status,
                 gr.update(choices=get_downloaded_character_series(), value=series),
                 gr.update(choices=get_downloaded_character_choices(series, keyword), value=character),
                 get_downloaded_character_details(character),
@@ -3219,7 +3246,7 @@ def create_ui() -> gr.Blocks:
                 gr.update(choices=list(source_choices), value=source_labels[source_value]),
                 gr.update(choices=list(pipeline_choices), value=pipeline_labels[pipeline_value]),
                 gr.update(choices=list(presets), value=preset),
-                get_cover_vc_route_status(pipeline_value, karaoke_separation=karaoke),
+                get_cover_vc_route_status(pipeline_value, karaoke_separation=karaoke, input_mode=input_mode),
                 check_mature_deecho_status(), get_device_info(),
                 gr.update(choices=_build_device_choices()),
                 gr.update(value=get_model_table(), headers=[t('model_name','ui'),t('model_path','ui'),t('index_path','ui')]))
@@ -3230,7 +3257,7 @@ def create_ui() -> gr.Blocks:
             return updates
 
         translated_components, refresh_translations = bind_static_translations(app)
-        dynamic_components = [language_status, downloaded_series, character_dropdown, character_details,
+        dynamic_components = [cover_input_mode, language_status, downloaded_series, character_dropdown, character_details,
                      download_series, download_char_dropdown, download_char_details,
                      cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset,
                      cover_vc_route_status, mature_deecho_status, device_info, device_radio, model_table]
@@ -3239,7 +3266,7 @@ def create_ui() -> gr.Blocks:
             fn=change_language,
             inputs=[language_dropdown, downloaded_series, downloaded_keyword, character_dropdown,
                     download_series, download_keyword, download_char_dropdown,
-                    cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset, cover_karaoke],
+                    cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset, cover_karaoke, cover_input_mode],
             outputs=language_outputs,
         ).success(fn=None, inputs=[language_dropdown], outputs=None, js=LANGUAGE_CHANGE_JS, queue=False)
         app.load(fn=lambda: (get_current_language_label(), *refresh_translations(get_current_language_label())),

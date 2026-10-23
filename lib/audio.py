@@ -38,7 +38,16 @@ def save_audio(path: str, audio: np.ndarray, sr: int = 48000):
     """
     # 确保音频在 [-1, 1] 范围内
     audio = np.clip(audio, -1.0, 1.0)
-    sf.write(path, audio, sr, subtype="FLOAT")
+    # Internal RVC processing must not round through PCM16 or narrow a DOUBLE
+    # synthesizer result. Lower precision floating arrays are losslessly widened
+    # to FLOAT; genuine float64 arrays retain a DOUBLE boundary.
+    output_dtype = np.float64 if np.asarray(audio).dtype == np.dtype("float64") else np.float32
+    sf.write(
+        path,
+        np.asarray(audio).astype(output_dtype, copy=False),
+        sr,
+        subtype="DOUBLE" if output_dtype == np.float64 else "FLOAT",
+    )
 
 
 def soft_clip(
@@ -57,13 +66,18 @@ def soft_clip(
     Returns:
         np.ndarray: 处理后的音频
     """
-    audio = np.asarray(audio, dtype=np.float32)
+    audio = np.asarray(audio)
+    if not np.issubdtype(audio.dtype, np.floating):
+        audio = audio.astype(np.float32)
+    elif audio.dtype not in (np.dtype("float32"), np.dtype("float64")):
+        audio = audio.astype(np.float32)
 
     if threshold <= 0:
         raise ValueError("threshold 必须大于 0")
     if ceiling <= threshold:
         raise ValueError("ceiling 必须大于 threshold")
 
+    source_dtype = audio.dtype
     result = audio.copy()
     abs_audio = np.abs(result)
     mask = abs_audio > threshold
@@ -73,7 +87,8 @@ def soft_clip(
     overshoot = (abs_audio[mask] - threshold) / (ceiling - threshold + 1e-8)
     compressed = threshold + (ceiling - threshold) * np.tanh(overshoot)
     result[mask] = np.sign(result[mask]) * compressed
-    return result.astype(np.float32, copy=False)
+    output_dtype = source_dtype if source_dtype in (np.dtype("float32"), np.dtype("float64")) else np.dtype("float32")
+    return result.astype(output_dtype, copy=False)
 
 
 def soft_clip_array(

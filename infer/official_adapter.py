@@ -149,7 +149,10 @@ def export_model_to_official(
 
     log.detail(f"导出模型到官方目录: {sid}")
 
-    cpt = torch.load(model_path, map_location="cpu", weights_only=False)
+    from infer.rvc_checkpoint import safe_load_rvc_checkpoint, prepare_rvc_checkpoint
+    cpt, _ = prepare_rvc_checkpoint(
+        safe_load_rvc_checkpoint(model_path), model_label=str(model_path), validate_structure=False,
+    )
     contract = inspect_checkpoint(cpt, str(model_path))
     version_info = inspect_rvc_model_version(cpt, str(model_path))
     if version_info.metadata_mismatch:

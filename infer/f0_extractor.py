@@ -120,7 +120,10 @@ class RMVPEExtractor(F0Extractor):
 
     def extract(self, audio: np.ndarray) -> np.ndarray:
         self.load_model()
-        return self.model.infer_from_audio(audio, thred=0.01)
+        from infer.rmvpe_boundaries import correct_rmvpe_transitions
+
+        f0 = self.model.infer_from_audio(audio, thred=0.01)
+        return correct_rmvpe_transitions(audio, f0)[0]
 
 
 class FCPEExtractor(F0Extractor):

@@ -4,6 +4,8 @@ AI-RVC 是一个开源的 [RVC v1/v2](https://github.com/RVC-Project/Retrieval-b
 
 > 在线体验：[TelkNet AI 翻唱](https://telknet.cc/tools/ai-rvc)
 
+**1.6.0 候选版**同步了 TelkNet 2026-10-23 的同源音频更新：纯人声输入、RMVPE 转音边界核验、原生模型精度、按原时间线拼接和保留目标相位的后处理，并修复标准角色双索引包的安装。代码在本项目独立运行；399 项本地回归及花丸五首完整翻唱已通过技术检查，中英文页面均已实际操作。来源与实测见 [同步记录](docs/TelkNet同源更新.md)，构建和成品验收范围见 [1.6.0 发布准备](docs/发布准备.md)。本版安装包与镜像尚未正式发布，以下公开下载仍指向稳定版 1.5.1。
+
 **运行入口：Windows / Linux / WSL2 / Docker / Google Colab / Hugging Face Spaces**；各平台验证范围见下文。
 
 **[1.5.1 已发布](https://github.com/mason369/AI-RVC/releases/tag/v1.5.1)**。Windows/Linux CPU/CUDA 四种便携包均完成逐文件校验及默认、官方两条真实翻唱路线，共验证 44 个 Float32 输出；各构建均通过 343 项回归。Release 提供完整分卷、SHA-256、实际运行记录和与 v1.4.1 的全量文件对照。公开 Docker 镜像 `1.5.1-cpu` / `1.5.1-cuda` 均已匿名拉取并完成两条真实路线，另验证 22 个 Float32 输出，见[平台验收](docs/平台适配与验收.md)。部署、持久化和登录用法见 [Docker 使用指南](docs/Docker使用指南.md)，发行核对见[发布与验收](docs/发布准备.md)。
@@ -15,6 +17,8 @@ AI-RVC 是一个开源的 [RVC v1/v2](https://github.com/RVC-Project/Retrieval-b
 ![最新多轨播放器：真实翻唱波形、对照轨与七类输出](docs/多轨播放器.png)
 
 **上传、选角色、开始翻唱。** 默认完成 Leap 人声/纯伴奏分离、主唱与和声分离、固定 Stereo De-Reverb 和 RVC 转换。展开手动设置可调整移调、索引率、说话人、混音及和声保留方式。
+
+已有干声可选择 **纯人声转换**：保留音高、索引、说话人、保护和响度参数，直接生成输入人声、转换人声两轨；不会执行分离、去混响或成品混音。配置/API 对应 `cover.input_mode` / `CoverPipeline.process(input_mode="vocals")`，默认 `song`。
 
 <details>
 <summary>查看翻唱设置与角色下载界面</summary>
@@ -419,6 +423,24 @@ English: audio-separator 0.47.0 follows the model's RoFormer chunk and overlap c
 
 ## 技术架构
 
+```mermaid
+flowchart TD
+    A[上传歌曲或人声] --> B{输入类型}
+    B -->|song| C[Leap 人声与伴奏分离]
+    C --> D[MVSep 主唱与带和声伴奏]
+    D --> E[去混响]
+    E --> F[HuBERT + RMVPE + RVC 原生精度推理]
+    B -->|vocals| F
+    M[角色权重与索引配对] --> N[架构、原生精度与完整向量校验]
+    N --> F
+    F --> G[按原时间线裁剪与拼接]
+    G -->|song| H[相位保留后处理与混音]
+    G -->|vocals| I[输入人声 + 转换人声]
+    H --> J[成品与七类分轨]
+```
+
+下图展开默认整曲路线；纯人声按上图直接进入 RVC。
+
 ```
 音频输入 → CoverPipeline
               ↓
@@ -473,7 +495,7 @@ English: audio-separator 0.47.0 follows the model's RoFormer chunk and overlap c
 | 去混响 | BS-RoFormer De-Reverb Stereo 22.5050 | 已集成，固定预处理模型 | `vocals_for_vc.wav` |
 | 内容与音高 | HuBERT Base + RMVPE | 已集成，默认 | 内容特征与 F0 |
 | 音色转换 | RVC v1/v2 + FAISS | 已集成，默认使用官方兼容推理和项目后处理 | `converted_vocals.wav` |
-| 混音 | `lib/mixer.py` + pedalboard | 已集成 | `cover.wav` |
+| 混音 | `lib/mixer.py`；FLOAT 混响使用 pedalboard，DOUBLE 使用等价双精度 JUCE 算法 | 已集成 | `cover.wav` |
 
 ---
 
@@ -631,7 +653,9 @@ RMVPE、FCPE 和 SwiftF0 的论文使用不同数据集、噪声条件和速度�
 
 支持标准 RVC **v1／256 维**和 **v2／768 维**，带 F0 / 无 F0、原生 32 / 40 / 48 kHz，以及权重实际包含的多说话人 ID。v1 使用 HuBERT 原生学习投影，不是把 768 维截断或补齐；索引必须与模型同维度。未知维度、损坏权重和无效索引会明确报错，不做降维或算法降级。
 
-默认分离、中间文件和混音保留 Float32 WAV；模型推理只使用 FP32 或设备支持的 FP16，不使用 INT8/INT4/FP8。模型要求的 16 kHz HuBERT 输入不等于把成品降为 16 kHz。
+角色包可同时保留同名配对的 `trained_*.index` 与 `added_*.index`；只有前者经 FAISS 确认为已训练但不含向量的 IVFFlat 模板时，才选择后者并继续完整校验。多个有效索引、损坏模板或无法配对的文件仍明确报错。
+
+默认分离保持 FP32；RVC 与 RMVPE 分别使用各自权重的原生 FP16、FP32 或 FP64 精度，并校验设备支持，固定 HuBERT 使用 FP32。不使用 INT8/INT4/FP8，也不把 FP64 音频经 Float32 或 PCM16 中转；输出、混音和混响保留相应浮点精度。模型要求的 16 kHz HuBERT 输入不等于把成品降为 16 kHz。
 
 2026-09-05 本机已完成 240.98 秒 MP3 的默认全流程验收，7 路浮点音频均有效，总耗时 436.87 秒（含分离、去混响、转换、后处理、复制与校验）。官方与本地 v1/v2、MCP、UVR5、Demucs、PM 和 FCPE 均有真实音频运行记录。离线 RVC 固定采用常规推理，不对每个不同长度片段重复捕获 CUDA Graph；不更换算法或降低模型精度。这些结果不是所有歌曲音质、所有设备或安装包的验收保证。
 

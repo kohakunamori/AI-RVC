@@ -253,6 +253,19 @@ def get_separator_chain_labels(
 
 
 def _download_hf_file(repo_id: str, filename: str, model_dir: str) -> str:
+    # Every default model/config must retain its immutable identity, including
+    # window-size reads before inference. Never resolve these through main.
+    for spec in _CUSTOM_AUDIO_SEPARATOR_MODELS.values():
+        if spec["repo_id"] != repo_id:
+            continue
+        for kind in ("model", "config"):
+            if spec[f"{kind}_filename"] == filename:
+                from tools.model_assets import download_pinned_asset
+                return str(download_pinned_asset(
+                    repo_id, filename, Path(model_dir), spec["revision"], spec[f"{kind}_sha256"],
+                ))
+    if os.environ.get("AI_RVC_OFFLINE") == "1":
+        raise FileNotFoundError(f"Unprovisioned separator asset: {repo_id}/{filename}")
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as exc:
@@ -379,7 +392,7 @@ def _install_custom_audio_separator_models(separator: Separator) -> None:
         if runtime_config_filename:
             import yaml
 
-            runtime_config_path = asset_dir / runtime_config_filename
+            runtime_config_path = Path(separator.output_dir) / "_model_configs" / runtime_config_filename
             runtime_config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, "r", encoding="utf-8") as config_handle:
                 runtime_config = yaml.load(config_handle, Loader=yaml.FullLoader)
@@ -603,17 +616,26 @@ def _get_karaoke_min_duration_seconds(
         if custom_model is None:
             raise KeyError(f"Karaoke ensemble 模型缺少下载配置: {model_name}")
 
-        config_path = Path(model_dir) / custom_model["config_filename"]
-        if not config_path.exists():
-            config_path = Path(
-                _download_hf_file(
-                    custom_model["repo_id"],
-                    custom_model["config_filename"],
-                    model_dir,
-                )
-            )
+        config_path = Path(_download_hf_file(
+            custom_model["repo_id"], custom_model["config_filename"], model_dir,
+        ))
         with open(config_path, "r", encoding="utf-8") as handle:
             config = yaml.load(handle, Loader=yaml.FullLoader)
+
+        # MVSep's pinned models predict lead vocals directly. Resolve this
+        # semantic contract from the verified configuration, never from which
+        # output happens to be louder in an intro or an instrumental slice.
+        training_config = config.get("training", {})
+        target = str(training_config.get("target_instrument", "")).lower()
+        instruments = {
+            str(value).lower() for value in training_config.get("instruments", [])
+        }
+        if (
+            target != "vocals"
+            or instruments not in ({"vocals", "other"}, {"vocals", "instrumental"})
+            or config.get("model", {}).get("num_stems") != 1
+        ):
+            raise ValueError(f"Karaoke 模型主唱输出契约不匹配: {config_path}")
 
         audio_config = config.get("audio", {})
         model_config = config.get("model", {})
@@ -652,7 +674,8 @@ def _pad_audio_to_min_duration(
     if original_duration >= min_duration_seconds:
         return audio_path, original_duration
 
-    data, sample_rate = sf.read(audio_path, always_2d=True)
+    dtype = "float64" if info.subtype in {"DOUBLE", "PCM_32"} else "float32"
+    data, sample_rate = sf.read(audio_path, always_2d=True, dtype=dtype)
     target_frames = int(math.ceil(min_duration_seconds * sample_rate)) + 1
     pad_frames = target_frames - data.shape[0]
     if pad_frames <= 0:
@@ -662,7 +685,7 @@ def _pad_audio_to_min_duration(
     pad_dir = output_dir / "_hybrid_padded_inputs"
     pad_dir.mkdir(parents=True, exist_ok=True)
     padded_path = pad_dir / f"{Path(audio_path).stem}_leap_xe_padded.wav"
-    sf.write(padded_path, padded, sample_rate, subtype="FLOAT")
+    sf.write(padded_path, padded, sample_rate, subtype="DOUBLE" if dtype == "float64" else "FLOAT")
     return str(padded_path), original_duration
 
 
@@ -682,8 +705,9 @@ def _trim_audio_to_duration(audio_path: str, duration_seconds: Optional[float]) 
     if info.frames == target_frames:
         return
 
-    data, sample_rate = sf.read(audio_path, always_2d=True)
-    sf.write(audio_path, data[:target_frames], sample_rate, subtype="FLOAT")
+    dtype = "float64" if info.subtype == "DOUBLE" else "float32"
+    data, sample_rate = sf.read(audio_path, always_2d=True, dtype=dtype)
+    sf.write(audio_path, data[:target_frames], sample_rate, subtype="DOUBLE" if dtype == "float64" else "FLOAT")
 
 
 def _get_custom_roformer_min_duration_seconds(model_dir: str, model_name: str) -> float:
@@ -691,7 +715,10 @@ def _get_custom_roformer_min_duration_seconds(model_dir: str, model_name: str) -
     import yaml
 
     spec = _CUSTOM_AUDIO_SEPARATOR_MODELS[model_name]
-    config_path = Path(model_dir) / spec.get("local_subdir", "") / spec["config_filename"]
+    config_path = Path(_download_hf_file(
+        spec["repo_id"], spec["config_filename"],
+        str(Path(model_dir) / spec.get("local_subdir", "")),
+    ))
     with config_path.open(encoding="utf-8") as stream:
         config = yaml.full_load(stream)
     hop = int(config["model"]["stft_hop_length"])
@@ -849,12 +876,7 @@ class RoformerSeparator:
         output_files = self.separator.separate(audio_path)
 
         # audio-separator 返回的可能是纯文件名，需要拼上 output_dir
-        resolved_files = []
-        for f in output_files:
-            p = Path(f)
-            if not p.is_absolute():
-                p = output_path / p
-            resolved_files.append(str(p))
+        resolved_files = _resolve_output_files(output_files, output_path)
 
 
         # audio-separator 返回文件列表，通常 [primary, secondary]
@@ -875,7 +897,8 @@ class RoformerSeparator:
             elif "vocal" in f_lower or "primary" in f_lower:
                 vocals_path = f
 
-        if not vocals_path or not accompaniment_path or vocals_path == accompaniment_path:
+        if (len(resolved_files) != 2 or not vocals_path or not accompaniment_path
+                or vocals_path == accompaniment_path):
             raise RuntimeError(f"分离输出无法唯一确定人声与伴奏，停止处理：{resolved_files}")
         for file_path in (vocals_path, accompaniment_path):
             if not Path(file_path).is_file():
@@ -1021,7 +1044,7 @@ class KaraokeSeparator:
 
         self.load_model(output_dir=str(output_path))
         self.separator.output_dir = str(output_path)
-        model_dir = str(Path(__file__).parent.parent / "assets" / "separator_models")
+        model_dir = str(_separator_model_dir())
         min_duration_seconds = _get_karaoke_min_duration_seconds(
             model_dir,
             self.model_filename,
@@ -1036,6 +1059,8 @@ class KaraokeSeparator:
                 min_duration_seconds,
             )
 
+        reference = sf.info(separation_input_path)
+        _, _, input_nonzero = _validate_karaoke_audio(separation_input_path, reference)
         try:
             output_files = self.separator.separate(separation_input_path)
         except FileNotFoundError as exc:
@@ -1083,8 +1108,8 @@ class KaraokeSeparator:
                 f"lead={lead_vocals_path}, second={second_stem_path}"
             )
 
-        lead_rms, lead_peak, lead_nonzero = _get_audio_activity_stats(lead_vocals_path)
-        second_rms, second_peak, second_nonzero = _get_audio_activity_stats(second_stem_path)
+        lead_rms, lead_peak, lead_nonzero = _validate_karaoke_audio(lead_vocals_path, reference)
+        second_rms, second_peak, second_nonzero = _validate_karaoke_audio(second_stem_path, reference)
         log.detail(
             "Karaoke输出能量检测: "
             f"lead_rms={lead_rms:.6f}, lead_peak={lead_peak:.6f}, lead_nonzero={lead_nonzero}; "
@@ -1092,13 +1117,13 @@ class KaraokeSeparator:
             f"second_peak={second_peak:.6f}, second_nonzero={second_nonzero}"
         )
 
-        lead_is_nearly_silent = lead_nonzero == 0 or (lead_rms < 1e-5 and lead_peak < 1e-4)
-        second_has_content = second_nonzero > 0 and (second_rms >= 5e-5 or second_peak >= 5e-4)
-        if lead_is_nearly_silent and second_has_content:
+        if input_nonzero and not lead_nonzero and not second_nonzero:
             raise RuntimeError(
-                "Karaoke 主唱轨几乎静音且第二路有内容，输出疑似反转；"
-                "为避免错误转换伴奏，已停止处理"
+                "Karaoke 两路输出均为静音，但输入包含音频内容，已停止处理"
             )
+        # A correctly named silent lead is valid for vocal-free time slices.
+        # Preserve both model outputs exactly; never swap them, fill the lead
+        # with accompaniment, or infer a model's target from relative energy.
 
         final_lead = str(output_path / "lead_vocals.wav")
         final_second_stem = str(
@@ -1219,7 +1244,7 @@ class RoformerDereverbSeparator:
         duration = None
         audio_path = _ensure_separator_pcm_wav(audio_path, output_path)
         if self.model_filename in _CUSTOM_AUDIO_SEPARATOR_MODELS:
-            model_dir = str(Path(__file__).parent.parent / "assets" / "separator_models")
+            model_dir = str(_separator_model_dir())
             audio_path, duration = _pad_audio_to_min_duration(
                 audio_path, output_path,
                 _get_custom_roformer_min_duration_seconds(model_dir, self.model_filename),
@@ -1232,20 +1257,23 @@ class RoformerDereverbSeparator:
             f"{[Path(file_path).name for file_path in resolved_files]}"
         )
 
-        dry_path = None
+        dry_paths = []
+        unknown_paths = []
         for file_path in resolved_files:
             stem_role = self._classify_stem(Path(file_path).name)
             log.detail(
                 f"  {Path(file_path).name} -> 分类为: {stem_role or 'unknown'}"
             )
             if stem_role == "dry":
-                dry_path = file_path
-                break
+                dry_paths.append(file_path)
+            elif stem_role is None:
+                unknown_paths.append(file_path)
 
-        if not dry_path or not Path(dry_path).exists():
+        if len(dry_paths) != 1 or unknown_paths:
             raise FileNotFoundError(
-                f"RoFormer De-Reverb dry轨未找到，输出文件: {[Path(p).name for p in resolved_files]}"
+                f"RoFormer De-Reverb dry轨未找到或无法唯一识别，输出文件: {[Path(p).name for p in resolved_files]}"
             )
+        dry_path = dry_paths[0]
 
         final_dry = str(output_path / "roformer_deecho_vocals.wav")
         _safe_move(dry_path, final_dry)
@@ -1422,3 +1450,35 @@ def get_available_models() -> list:
             {"name": "mdx_extra", "description": "MDX 模型，适合某些音乐类型"},
         ])
     return models
+
+
+def _separator_model_dir() -> Path:
+    configured = os.environ.get("AI_RVC_SEPARATOR_MODELS_DIR", "").strip()
+    if configured:
+        return Path(configured)
+    assets = os.environ.get("AI_RVC_ASSETS_DIR", "").strip()
+    return (Path(assets) if assets else Path(__file__).resolve().parents[1] / "assets") / "separator_models"
+
+
+def _validate_karaoke_audio(
+    audio_path: str, reference: sf._SoundFileInfo,
+) -> tuple[float, float, int]:
+    """Validate decoded samples and the prepared timeline without downmixing."""
+    info = sf.info(audio_path)
+    expected = (reference.frames, reference.samplerate, reference.channels)
+    actual = (info.frames, info.samplerate, info.channels)
+    if info.frames <= 0 or actual != expected:
+        raise RuntimeError(
+            f"Karaoke 音频规格不匹配: {audio_path}; "
+            f"frames/rate/channels={actual}, expected={expected}"
+        )
+    square_sum = 0.0
+    peak = 0.0
+    nonzero = 0
+    for block in sf.blocks(audio_path, blocksize=65536, dtype="float64", always_2d=True):
+        if not np.isfinite(block).all():
+            raise RuntimeError(f"Karaoke 音频包含非有限采样值: {audio_path}")
+        square_sum += float(np.sum(np.square(block)))
+        peak = max(peak, float(np.max(np.abs(block))))
+        nonzero += int(np.count_nonzero(block))
+    return math.sqrt(square_sum / (info.frames * info.channels)), peak, nonzero

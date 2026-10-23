@@ -406,34 +406,5 @@ class RMVPE:
         return f0
 
     def _to_local_average_cents(self, salience: np.ndarray, thred: float) -> np.ndarray:
-        """官方 RVC 的 to_local_average_cents 算法"""
-        # Step 1: 找到每帧的峰值 bin
-        center = np.argmax(salience, axis=1)  # [T]
-
-        # Step 2: 对 salience 进行 padding
-        salience = np.pad(salience, ((0, 0), (4, 4)))  # [T, 368]
-        center += 4  # 调整 center 索引
-
-        # Step 3: 提取峰值附近 9 个 bin 的窗口并计算加权平均
-        todo_salience = []
-        todo_cents_mapping = []
-        starts = center - 4
-        ends = center + 5
-
-        for idx in range(salience.shape[0]):
-            todo_salience.append(salience[idx, starts[idx]:ends[idx]])
-            todo_cents_mapping.append(self.cents_mapping[starts[idx]:ends[idx]])
-
-        todo_salience = np.array(todo_salience)  # [T, 9]
-        todo_cents_mapping = np.array(todo_cents_mapping)  # [T, 9]
-
-        # Step 4: 加权平均
-        product_sum = np.sum(todo_salience * todo_cents_mapping, axis=1)
-        weight_sum = np.sum(todo_salience, axis=1) + 1e-9
-        cents = product_sum / weight_sum
-
-        # Step 5: 阈值过滤 - 使用原始 salience 的最大值
-        maxx = np.max(salience, axis=1)
-        cents[maxx <= thred] = 0
-
-        return cents
+        from infer.rmvpe_boundaries import local_average_cents
+        return local_average_cents(salience, self.cents_mapping, thred)

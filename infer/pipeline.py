@@ -43,6 +43,7 @@ class VoiceConversionPipeline:
         self.spk_count = 1
         self.model_feature_dim = None
         self.model_version = "v2"  # 默认 v2（768 维）
+        self.runtime_dtype = torch.float32
 
         # 默认参数
         self.sample_rate = 16000  # HuBERT 输入采样率
@@ -117,24 +118,19 @@ class VoiceConversionPipeline:
 
     def load_voice_model(self, model_path: str) -> dict:
         """按实际权重结构加载 v1/v2、F0/非 F0 模型，不猜测缺失的架构。"""
-        from infer.lib.infer_pack.models import (
-            SynthesizerTrnMs256NSFsid, SynthesizerTrnMs768NSFsid,
-            SynthesizerTrnMs256NSFsid_nono, SynthesizerTrnMs768NSFsid_nono,
+        from infer.rvc_checkpoint import (
+            safe_load_rvc_checkpoint, checkpoint_weight_dtypes,
+            select_rvc_runtime_precision, build_rvc_synthesizer,
         )
-        checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+        checkpoint = safe_load_rvc_checkpoint(Path(model_path))
+        precision = select_rvc_runtime_precision(checkpoint_weight_dtypes(checkpoint), self.device)
+        model, checkpoint, compatibility = build_rvc_synthesizer(
+            checkpoint, model_label=str(model_path), is_half=precision.is_half,
+            runtime_dtype=precision.runtime_dtype,
+        )
         contract = inspect_checkpoint(checkpoint, str(model_path))
-        classes = {
-            ("v1", True): SynthesizerTrnMs256NSFsid,
-            ("v2", True): SynthesizerTrnMs768NSFsid,
-            ("v1", False): SynthesizerTrnMs256NSFsid_nono,
-            ("v2", False): SynthesizerTrnMs768NSFsid_nono,
-        }
-        model = classes[(contract.version, contract.uses_f0)](*contract.config, is_half=False)
-        del model.enc_q
-        validate_state_dict(model, checkpoint["weight"])
-        model.load_state_dict({k: v for k, v in checkpoint["weight"].items()
-                               if not k.startswith("enc_q.")}, strict=True)
-        self.voice_model = model.to(self.device).float().eval()
+        self.runtime_dtype = precision.torch_dtype
+        self.voice_model = model.to(self.device, dtype=self.runtime_dtype).eval()
         self.model_version = contract.version
         self.model_feature_dim = contract.feature_dim
         self.output_sr = contract.sample_rate
@@ -144,7 +140,8 @@ class VoiceConversionPipeline:
         self.index_vectors = None
         info = {"name": Path(model_path).stem, "sample_rate": self.output_sr,
                 "version": self.model_version, "feature_dim": self.model_feature_dim,
-                "speaker_count": self.spk_count, "uses_f0": self.uses_f0}
+                "speaker_count": self.spk_count, "uses_f0": self.uses_f0,
+                "runtime_dtype": precision.runtime_dtype, "vocoder": compatibility.vocoder}
         log.info(f"语音模型已加载: {info}")
         return info
 
@@ -403,7 +400,8 @@ class VoiceConversionPipeline:
         log.debug(f"[_process_chunk] 输入 F0: len={len(f0)}, max={np.max(f0):.1f}, min={np.min(f0):.1f}, non-zero={np.sum(f0 > 0)}")
 
         # 转换为张量
-        features_tensor = torch.from_numpy(features).float().to(self.device).unsqueeze(0)
+        runtime_dtype = getattr(self, "runtime_dtype", torch.float32)
+        features_tensor = torch.from_numpy(features).to(self.device, dtype=runtime_dtype).unsqueeze(0)
         # HuBERT 输出帧率是 50fps (hop=320 @ 16kHz)，但 RVC 模型期望 100fps
         # 需要 2x 上采样特征
         # 注意：interpolate 需要 [B, C, T] 格式，但模型需要 [B, T, C] 格式
@@ -420,7 +418,8 @@ class VoiceConversionPipeline:
             f0 = np.pad(f0, (0, target_len - len(f0)), mode='edge')
         log.debug(f"[_process_chunk] F0 对齐: {original_f0_len} -> {len(f0)} (目标: {target_len})")
 
-        f0_tensor = torch.from_numpy(f0.copy()).float().to(self.device).unsqueeze(0)
+        pitch_dtype = torch.float64 if runtime_dtype == torch.float64 or f0.dtype == np.float64 else torch.float32
+        f0_tensor = torch.from_numpy(f0.copy()).to(self.device, dtype=pitch_dtype).unsqueeze(0)
         # 将 F0 (Hz) 转换为 pitch 索引 (0-255)
         # RVC mel 量化映射到 coarse pitch bins
         f0_coarse = torch.from_numpy(self._f0_to_coarse(f0)).to(self.device).unsqueeze(0)
@@ -437,11 +436,9 @@ class VoiceConversionPipeline:
         if self.uses_f0:
             args.extend([f0_coarse, f0_tensor])
         args.append(sid)
-        if use_fp16 and supports_fp16(self.device):
-            with torch.amp.autocast(str(self.device.type), dtype=torch.float16):
-                audio_out, x_mask, _ = self.voice_model.infer(*args)
-        else:
-            audio_out, x_mask, _ = self.voice_model.infer(*args)
+        if use_fp16 and runtime_dtype != torch.float16:
+            raise ValueError("不能将当前模型的原生权重降为 FP16")
+        audio_out, x_mask, _ = self.voice_model.infer(*args)
 
         log.debug(f"[_process_chunk] 推理完成, audio_out: shape={audio_out.shape}, dtype={audio_out.dtype}")
         log.debug(f"[_process_chunk] x_mask: shape={x_mask.shape}, sum={x_mask.sum().item()}")
@@ -450,7 +447,7 @@ class VoiceConversionPipeline:
         del features_tensor, f0_tensor, f0_coarse
         empty_device_cache(self.device)
 
-        audio_out = audio_out.squeeze().cpu().detach().float().numpy()
+        audio_out = audio_out.squeeze().cpu().detach().numpy()
         log.debug(f"Chunk audio: len={len(audio_out)}, max={np.max(np.abs(audio_out)):.4f}, min={np.min(audio_out):.4f}")
 
         # 注意：不再对 F0=0 区域应用硬静音 mask
@@ -611,32 +608,13 @@ class VoiceConversionPipeline:
                 n_feat = features.shape[0]
                 protect_mask = np.ones(n_feat, dtype=np.float32)
 
-                # 计算每个特征帧的F0稳定性和能量
                 for fi in range(n_feat):
                     f0_start = fi * f0_per_feat
                     f0_end = min(f0_start + f0_per_feat, len(f0))
                     if f0_end > f0_start:
                         f0_segment = f0[f0_start:f0_end]
-                        # 无声段（F0=0）：强保护，保留更多原始特征
-                        # 参考: "Voice Conversion for Articulation Disorders" 建议保护辅音
-                        if np.all(f0_segment <= 0):
-                            # 提高无声段保护强度，从 protect 提升到 protect * 1.5
-                            protect_mask[fi] = min(0.8, protect * 1.5)
-                        # F0不稳定段（方差大）：中等保护
-                        elif len(f0_segment) > 1 and np.std(f0_segment) > 50:
-                            protect_mask[fi] = protect + (1.0 - protect) * 0.3
-                        # 低能量段（可能是呼吸音）：增强保护
-                        # 使用特征的L2范数作为能量指标
-                        feat_energy = np.linalg.norm(features_before_index[fi])
-                        if feat_energy < 0.5:  # 低能量阈值
-                            protect_mask[fi] = min(0.8, protect * 1.3)
-
-                # 平滑保护掩码，避免突变
-                smooth_kernel = np.array([1, 2, 3, 2, 1], dtype=np.float32)
-                smooth_kernel /= np.sum(smooth_kernel)
-                protect_mask = np.convolve(protect_mask, smooth_kernel, mode="same")
-                protect_mask = np.convolve(protect_mask, smooth_kernel, mode="same")
-                protect_mask = np.clip(protect_mask, protect, 1.0)
+                        if np.any(f0_segment <= 0):
+                            protect_mask[fi] = protect
                 protect_mask = protect_mask[:, np.newaxis]  # [T, 1] 广播到 [T, C]
                 features = features * protect_mask + features_before_index * (1 - protect_mask)
 
@@ -748,127 +726,19 @@ class VoiceConversionPipeline:
         return output_path
 
     def _crossfade_chunks(self, chunks: list, overlap_frames: int) -> np.ndarray:
-        """
-        使用 SOLA (Synchronized Overlap-Add) 拼接音频块
-
-        SOLA 通过在重叠区域搜索最佳相位对齐点来避免分块边界的撕裂伪影。
-        参考: w-okada/voice-changer Issue #163, DDSP-SVC 实现
-
-        Args:
-            chunks: 音频块列表
-            overlap_frames: 重叠帧数（特征帧）
-
-        Returns:
-            np.ndarray: 拼接后的音频
-        """
-        if len(chunks) == 1:
-            return chunks[0]
-
-        # 正确计算重叠的音频样本数
-        # 1 特征帧 = HOP_LENGTH 输入样本 @ 16kHz
-        # 输出样本数 = HOP_LENGTH * (output_sr / input_sr)
-        HOP_LENGTH = 320
-        INPUT_SR = 16000
-        output_sr = getattr(self, 'output_sr', 40000)
-
-        # 每个特征帧对应的输出样本数
-        samples_per_frame = int(HOP_LENGTH * output_sr / INPUT_SR)
-        overlap_samples = overlap_frames * samples_per_frame
-
-        log.debug(f"SOLA Crossfade: overlap_frames={overlap_frames}, samples_per_frame={samples_per_frame}, overlap_samples={overlap_samples}")
-
+        """Join aligned feature chunks without moving words along the timeline."""
+        from infer.audio_splice import plan_splice, splice_contexts
+        if not chunks:
+            raise ValueError("RVC returned no audio chunks")
+        overlap = round(overlap_frames * 320 * self.output_sr / 16000)
         result = chunks[0]
-
-        for i in range(1, len(chunks)):
-            chunk = chunks[i]
-
-            # 确保重叠区域不超过任一块的长度
-            actual_overlap = min(overlap_samples, len(result), len(chunk))
-
-            if actual_overlap > 0:
-                # SOLA: 在重叠区域搜索最佳相位对齐点
-                # 搜索范围：不超过一个基频周期（约 100-200 样本 @ 48kHz）
-                search_range = min(int(output_sr * 0.005), actual_overlap // 4)  # 5ms 或 1/4 重叠
-
-                # 提取前一块的尾部作为参考
-                reference = result[-actual_overlap:]
-
-                # 在新块的开头搜索最佳对齐位置
-                best_offset = 0
-                max_correlation = -1.0
-
-                for offset in range(max(0, -search_range), min(search_range + 1, len(chunk) - actual_overlap + 1)):
-                    # 提取候选区域
-                    candidate_start = max(0, offset)
-                    candidate_end = candidate_start + actual_overlap
-
-                    if candidate_end > len(chunk):
-                        continue
-
-                    candidate = chunk[candidate_start:candidate_end]
-
-                    # 计算归一化互相关
-                    ref_norm = np.linalg.norm(reference)
-                    cand_norm = np.linalg.norm(candidate)
-
-                    if ref_norm > 1e-6 and cand_norm > 1e-6:
-                        correlation = np.dot(reference, candidate) / (ref_norm * cand_norm)
-
-                        if correlation > max_correlation:
-                            max_correlation = correlation
-                            best_offset = offset
-
-                log.debug(f"SOLA chunk {i}: best_offset={best_offset}, correlation={max_correlation:.4f}")
-
-                # 如果相关性太低（<0.3），说明信号不连续，使用简单crossfade避免伪影
-                if max_correlation < 0.3:
-                    log.debug(f"SOLA chunk {i}: low correlation, using simple crossfade")
-                    fade_out = np.linspace(1, 0, actual_overlap)
-                    fade_in = np.linspace(0, 1, actual_overlap)
-                    result_end = result[-actual_overlap:] * fade_out
-                    chunk_start = chunk[:actual_overlap] * fade_in
-                    result = np.concatenate([
-                        result[:-actual_overlap],
-                        result_end + chunk_start,
-                        chunk[actual_overlap:]
-                    ])
-                    continue
-
-                # 在最佳对齐点应用交叉淡入淡出
-                aligned_start = max(0, best_offset)
-                aligned_end = aligned_start + actual_overlap
-
-                if aligned_end <= len(chunk):
-                    # 创建淡入淡出曲线（使用余弦窗以获得更平滑的过渡）
-                    fade_out = np.cos(np.linspace(0, np.pi / 2, actual_overlap)) ** 2
-                    fade_in = np.sin(np.linspace(0, np.pi / 2, actual_overlap)) ** 2
-
-                    # 应用交叉淡入淡出
-                    result_end = result[-actual_overlap:] * fade_out
-                    chunk_aligned = chunk[aligned_start:aligned_end] * fade_in
-
-                    # 拼接
-                    result = np.concatenate([
-                        result[:-actual_overlap],
-                        result_end + chunk_aligned,
-                        chunk[aligned_end:]
-                    ])
-                else:
-                    # 对齐失败，回退到简单拼接
-                    log.warning(f"SOLA alignment failed for chunk {i}, using simple crossfade")
-                    fade_out = np.linspace(1, 0, actual_overlap)
-                    fade_in = np.linspace(0, 1, actual_overlap)
-                    result_end = result[-actual_overlap:] * fade_out
-                    chunk_start = chunk[:actual_overlap] * fade_in
-                    result = np.concatenate([
-                        result[:-actual_overlap],
-                        result_end + chunk_start,
-                        chunk[actual_overlap:]
-                    ])
+        for chunk in chunks[1:]:
+            actual = min(overlap, len(result), len(chunk))
+            if actual:
+                plan = plan_splice(result[-actual:], chunk[:actual], self.output_sr)
+                result = splice_contexts(result, chunk, actual, plan)
             else:
-                # 无重叠，直接拼接
-                result = np.concatenate([result, chunk])
-
+                result = np.concatenate((result, chunk))
         return result
 
 

@@ -354,19 +354,28 @@ class SineGen(torch.nn.Module):
         """ f0: (batchsize, length, dim)
             where dim indicates fundamental tone and overtones
         """
-        a = torch.arange(1, upp + 1, dtype=f0.dtype, device=f0.device)
+        # Promote before any division or per-sample phase arithmetic. Widening
+        # only cumsum cannot recover phase values already rounded in FP16.
+        phase_dtype = torch.float64 if f0.dtype == torch.float64 else torch.float32
+        f0 = f0.to(dtype=phase_dtype)
+        a = torch.arange(1, upp + 1, dtype=phase_dtype, device=f0.device)
         rad = f0 / self.sampling_rate * a
-        rad2 = torch.fmod(rad[:, :-1, -1:].float() + 0.5, 1.0) - 0.5
-        rad_acc = rad2.cumsum(dim=1).fmod(1.0).to(f0)
+        rad2 = torch.fmod(rad[:, :-1, -1:] + 0.5, 1.0) - 0.5
+        rad_acc = rad2.cumsum(dim=1).fmod(1.0)
         rad += F.pad(rad_acc, (0, 0, 1, 0), mode='constant')
         rad = rad.reshape(f0.shape[0], -1, 1)
-        b = torch.arange(1, self.dim + 1, dtype=f0.dtype, device=f0.device).reshape(1, 1, -1)
-        rad *= b
-        rand_ini = torch.rand(1, 1, self.dim, device=f0.device)
-        rand_ini[..., 0] = 0
-        rad += rand_ini
-        sines = torch.sin(2 * np.pi * rad)
-        return sines
+        random_dtype = torch.float64 if f0.dtype == torch.float64 else torch.float32
+        rand_ini = torch.rand(
+            1, 1, self.dim, device=f0.device, dtype=random_dtype
+        )
+        # Keep the RNG draw for the following excitation noise. The common
+        # single-harmonic source otherwise only multiplies by 1 and adds 0.
+        if self.dim > 1:
+            b = torch.arange(1, self.dim + 1, dtype=phase_dtype, device=f0.device).reshape(1, 1, -1)
+            rad = rad * b
+            rand_ini[..., 0] = 0
+            rad += rand_ini
+        return rad.mul_(2 * np.pi).sin_()
         
     def forward(self, f0: torch.Tensor, upp: int):
         """sine_tensor, uv = forward(f0)

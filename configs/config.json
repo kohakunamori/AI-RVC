@@ -4,6 +4,7 @@
     "weights_dir": "assets/weights",
     "output_dir": "outputs",
     "cover": {
+        "input_mode": "song",
         "separator": "roformer",
         "roformer_model": "hybrid:leap_xe90_vocals+leap62_instrumental",
         "karaoke_separation": true,

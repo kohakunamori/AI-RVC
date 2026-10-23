@@ -22,7 +22,8 @@ function Result({payload}:{payload:Payload}) {
     if(url.origin!==new URL(document.baseURI).origin || !['http:','https:'].includes(url.protocol)) throw new Error(t('invalidFile'));
     return [{file:{name:file.orig_name || `${roles[index]}.wav`, s3_key:roles[index], stem_key:roles[index]},src:url.href}];
   }),[payload,t]);
-  const base=useMemo(()=>all.filter(x=>['converted_vocals','accompaniment'].includes(x.file.stem_key)).map(x=>x.file.s3_key),[all]);
+  const vocalsOnly=!payload.files[0] && !payload.files[5];
+  const base=useMemo(()=>all.filter(x=>(vocalsOnly?['converted_vocals','original_vocals']:['converted_vocals','accompaniment']).includes(x.file.stem_key)).map(x=>x.file.s3_key),[all,vocalsOnly]);
   const selected=useMemo(()=>all.filter(x=>base.includes(x.file.s3_key)||added.includes(x.file.s3_key)),[all,base,added]);
   const available=useMemo(()=>all.filter(x=>!selected.includes(x)),[all,selected]);
   useEffect(()=>{
@@ -45,15 +46,16 @@ function Result({payload}:{payload:Payload}) {
   return <>
     {error ? <div role="alert" className="player-error"><strong>{t('failed')}</strong><p>{t('errorAdvice')}</p><details><summary>{t('errorDetails')}</summary>{error}</details><button onClick={()=>{setError('');setMixerGeneration(v=>v+1);}}>{t('retry')}</button></div> :
     <MultiTrackAudioMixer key={mixerGeneration} tracks={selected} availableTracks={available}
-      initialMutedTrackIds={added} removableTrackIds={added}
+      initialMutedTrackIds={vocalsOnly?['original_vocals',...added]:added} removableTrackIds={added}
       onAddTrack={id=>setAdded(prev=>prev.includes(id)?prev:[...prev,id])}
       onRemoveTrack={id=>setAdded(prev=>prev.filter(x=>x!==id))}
-      description={t('description')} />}
+      stemLabels={vocalsOnly?{original_vocals:t('audioStemInputVocals')}:undefined}
+      description={t(vocalsOnly?'vocalsDescription':'description')} />}
     <p className="player-note">{t('previewNote')}</p>
     <div className="output-grid">{all.map(track=>{
-      const index=roles.indexOf(track.file.stem_key), label=t(labelKeys[index]);
+      const index=roles.indexOf(track.file.stem_key), label=t(vocalsOnly && index===2?'audioStemInputVocals':labelKeys[index]);
       const canAdd=available.includes(track);
-      return <article key={track.file.s3_key} className={`output-card ${index===0?'hero':''}`} style={{'--track-color':colors[index]} as React.CSSProperties}
+      return <article key={track.file.s3_key} className={`output-card ${(index===0 || (vocalsOnly && index===1))?'hero':''}`} style={{'--track-color':colors[index]} as React.CSSProperties}
         draggable={canAdd} onDragStart={e=>{e.dataTransfer.setData(audioTrackDragMime,track.file.s3_key);}}>
         <header><strong>{label}</strong><a href={track.src} download={track.file.name}>{t('download')}</a></header>
         <p>{track.file.name}</p>

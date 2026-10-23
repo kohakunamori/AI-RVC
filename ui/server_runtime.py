@@ -23,5 +23,11 @@ class BrowserServer(gradio.http_server.Server):
 
 
 def configure_browser_server():
+    bypass = set()
+    for key in ("NO_PROXY", "no_proxy"):
+        bypass.update(value.strip() for value in os.environ.get(key, "").split(",") if value.strip())
+    bypass.update(("localhost", "127.0.0.1", "::1"))
+    for key in ("NO_PROXY", "no_proxy"):
+        os.environ[key] = ",".join(sorted(bypass))
     if os.name == "nt":
         gradio.http_server.Server = BrowserServer

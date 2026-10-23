@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.6.0 候选版 / Release candidate — 2026-10-23
+
+### 中文
+
+- 从 TelkNet `dev` 固定提交 `a1116773b55ededc81ab37d088eb81f7e1176e7f` 移植同源音频更新，保持 AI-RVC 独立运行及当前固定官方源码，不增加 TelkNet 服务依赖。
+- 新增整曲 / 纯人声输入选择，配置和处理入口支持 `song` / `vocals`。纯人声跳过分离、去混响、源约束与混音，只导出实际输入及转换两轨；界面隐藏不适用参数，中英文及多轨播放器同步更新。
+- 统一安全检查点加载、真实架构识别与全层校验，支持标准 v1/v2、非 F0、多说话人及 Applio HiFi-GAN / MRF / RefineGAN。RVC、RMVPE 独立遵守原生权重精度，HuBERT 保持固定 FP32；索引保持完整 FP32 向量精确检索。
+- 修复连续 F0 和激励相位的低精度帧率边带；向量化 RMVPE 峰值邻域解码，并按原始波形核验提前转音及短缺口。保留真实无声帧，让清辅音保护生效。
+- 长音频按绝对采样坐标裁剪上下文，使用短且互补的交叉淡化；极短尾段按实际长度限制上下文，不移动后续歌词时间位置。
+- 后处理使用参考幅度和目标相位，加入有界参考缓存；质量候选选择后只做一次间隙抑制。FLOAT64 音频、混音和混响不经过 FLOAT32/PCM16 中转。
+- 分离配置读取统一验证固定资源，运行时配置写入会话目录；检查输出文件唯一性、主唱模型语义、采样率/通道/帧数和非有限值。纯伴奏区间允许静音主唱，不按相对能量交换音轨。短输入补长和裁切保留浮点精度。
+- 安装器兼容新版 `CUDA UMD Version` 驱动信息；本地 Gradio 回环自检绕过系统代理，并保留已有代理排除项。
+- 修复花丸等角色的标准双索引压缩包安装失败：验证 `trained_` 为零向量训练模板后，选择同名 `added_` 推理索引；保留原文件及完整向量校验，损坏或真正冲突的索引仍拒绝。
+- 增补数值、参数、分离完整性、原生精度、纯人声与长音频回归，本地全量 399 项通过。花丸同一模型与参数完成《Far far away》《梦的光点》《あこがれランララン》《SILENT PAIN》《だから僕は音楽を辞めた》五首全曲；另完成 Rin 整曲、官方 UVR5、本地兼容入口、MCP 与浏览器纯人声实测。两种界面语言、窄屏、播放和原始 WAV 下载均已实际检查。
+- 统一源码、Compose 与 OCI 构建版本为 1.6.0，更新 README、架构图、兼容性、播放器模式及发布准备文档。模型、索引、原曲和试听音频不进入发行源码。来源和量化结果见 `docs/TelkNet同源更新.md`；当前为候选版，四种便携包及两种 Docker 镜像须分别完成本版成品验收后才正式发布。
+
+### English
+
+- Port the shared audio updates from TelkNet `dev` commit `a1116773b55ededc81ab37d088eb81f7e1176e7f`. AI-RVC remains standalone and retains its pinned upstream sources.
+- Add `song` and `vocals` inputs across configuration, processing and the bilingual UI. Vocal input skips separation, dereverb, source constraints and mixing, and exports only input and converted vocals. The player and applicable controls follow the selected mode.
+- Share safe checkpoint loading, architecture detection and complete weight validation across standard v1/v2, non-F0, multi-speaker and Applio HiFi-GAN / MRF / RefineGAN models. RVC and RMVPE keep independent native precision; the pinned HuBERT stays FP32, and index retrieval retains exact full FP32 vectors.
+- Fix low-precision continuous-pitch and oscillator sidebands. Vectorize RMVPE decoding and verify premature note transitions and short gaps against the waveform while preserving actual unvoiced frames.
+- Crop long-form inference by absolute sample positions and join aligned context with short complementary fades. Bound context for very short terminal segments without shifting the source timeline.
+- Use reference magnitude with target phase, bounded reference caches and a single gap-suppression pass after quality selection. Preserve FLOAT64 through output, mixing and reverb.
+- Verify pinned separation configurations, unique output files, model stem semantics and audio frames/rate/channels/finiteness. Keep legitimately silent vocal stems in instrumental sections. Retain precision during short-input padding and cropping.
+- Support the new `CUDA UMD Version` driver header and bypass proxies for Gradio loopback checks while preserving existing exclusions.
+- Accept standard paired `trained_` / `added_` character archives, including Hanamaru. Verify the former is an empty trained template before selecting the latter; preserve both files and full vector validation, and reject corrupt or ambiguous indices.
+- Pass all 399 local regressions for numerical behavior, parameters, separation integrity, native precision, vocal input and long-form conversion. Complete five full Hanamaru covers with identical settings: “Far far away”, “梦的光点”, “あこがれランララン”, “SILENT PAIN” and “だから僕は音楽を辞めた”. Also exercise a full Rin cover, official UVR5, the local compatibility path, MCP and browser vocal conversion. Verify both UI languages, mobile layout, playback and original WAV downloads in a real browser.
+- Set source, Compose and OCI build versions to 1.6.0 and update architecture, compatibility, player-mode and release documentation. Exclude model weights, indices, source songs and listening outputs from the source release. See `docs/TelkNet同源更新.md` for provenance and measurements. This is a release candidate; all four portable packages and both Docker images require separate acceptance before public release.
+
 ## 1.5.1 — 2026-09-06
 
 ### 中文

@@ -387,6 +387,7 @@ class UiLanguageTests(unittest.TestCase):
                 "reverb_amount",
                 "rms_mix_rate",
                 "backing_mix",
+                "input_mode",
                 "progress",
             ],
         )

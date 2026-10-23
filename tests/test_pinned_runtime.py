@@ -168,51 +168,82 @@ class PinnedRuntimeTests(unittest.TestCase):
         self.assertFalse(config.is_half)
 
     def test_runner_imports_upstream_namespace_and_uses_checkpoint_speaker_count(self):
+        from test_rvc_checkpoint_compatibility import _official_checkpoint
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "configs").mkdir()
-            (root / "i18n").mkdir()
-            (root / "tools").mkdir()
-            (root / "infer/vc").mkdir(parents=True)
-            (root / "configs/config.py").write_text(
-                "import torch\ninfer_dtype = torch.float32\n"
-                "def configure_cuda_graph(device): return False\n"
-                "class Config:\n    def __init__(self):\n        self.dtype = infer_dtype\n        self.is_half = infer_dtype == torch.float16\n",
-                encoding="utf-8",
-            )
-            (root / "infer/vc/pipeline.py").write_text(
-                "import numpy as np\nclass Pipeline:\n"
-                "    def get_f0(self):\n        f0 = np.array([0, 220, 0], dtype=np.float32)\n"
-                "        try:\n            uv = f0 == 0\n"
-                "            f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])\n"
-                "        except Exception:\n            traceback.print_exc()\n        return f0\n"
-                "    def pipeline(self):\n        audio_opt = np.ones(1600, dtype=np.float32) * .1\n"
-                "        max_int16 = 32768\n"
-                "        audio_opt = (audio_opt * max_int16).astype(np.int16)\n        return audio_opt\n",
-                encoding="utf-8",
-            )
-            (root / "infer/vc/modules.py").write_text(
-                "import numpy as np\nimport torch\nfrom types import SimpleNamespace\nfrom infer.vc.pipeline import Pipeline\nclass VC:\n"
-                "    def __init__(self, config):\n        assert str(config.device) == 'cpu'\n        self.n_spk = None\n"
-                "    def get_vc(self, sid):\n"
-                "        self.cpt = {'config': [1025,32,192,192,768,2,6,3,0,'1',[3,7,11],[[1,3,5]],[10,10,2,2],512,[16,16,4,4],1,256,40000], 'weight': {'emb_g.weight': torch.zeros((1,256)), 'enc_p.emb_phone.weight': torch.zeros((192,256))}}\n"
-                "        self.net_g = SimpleNamespace(state_dict=lambda: self.cpt['weight'])\n        self.pipeline = Pipeline()\n"
-                "    def vc_single(self, sid, input_audio_path, f0_up_key, f0_method, file_index, index_rate, resample_sr, rms_mix_rate, protect):\n"
-                "        return 'Success.', (16000, self.pipeline.pipeline())\n",
-                encoding="utf-8",
-            )
+            for name in ("configs", "i18n", "tools", "infer/vc", "assets/weights"):
+                (root / name).mkdir(parents=True)
+            _, checkpoint = _official_checkpoint("v1", False)
+            checkpoint["weight"] = {k: v.double() for k, v in checkpoint["weight"].items()}
+            torch.save(checkpoint, root / "assets/weights/fixture.pth")
+            (root / "configs/config.py").write_text("""import torch
+infer_dtype = torch.float32
+def configure_cuda_graph(device): return False
+class Config:
+    def __init__(self):
+        self.dtype = infer_dtype
+        self.is_half = infer_dtype == torch.float16
+""", encoding="utf8")
+            (root / "infer/hubert.py").write_text("""def load_hubert_model(device, is_half=False):
+    assert str(device) == 'cpu' and not is_half
+    return object()
+""", encoding="utf8")
+            (root / "infer/vc/pipeline.py").write_text("""import numpy as np
+import torch
+class Pipeline:
+    def __init__(self, tgt_sr, config):
+        assert not config.is_half and config.dtype == torch.float32
+        self.tgt_sr = tgt_sr
+        self.window = 160
+        self.t_pad = 160
+        self.t_pad2 = 320
+        self.t_pad_tgt = 320
+    def vc(self, model, net_g, sid, audio, pitch, pitchf, times, index, vectors, index_rate, version, protect):
+        feats = torch.ones(1)
+        with torch.no_grad():
+            hasp = pitch is not None and pitchf is not None
+            assert feats.dtype == torch.float64
+            synthesized = torch.ones(1, 1, len(audio) * 2, dtype=feats.dtype) * .1
+        return synthesized[0, 0].data.cpu().float().numpy()
+    def pipeline(self, model, net_g, sid):
+        audio = np.ones(1600)
+        audio_pad = np.pad(audio, (160, 160))
+        pitch = pitchf = index = index_vectors = None
+        times, index_rate, version, protect, tgt_sr = [0,0,0], 0, 'v1', .33, self.tgt_sr
+        opt_ts = [800]
+        audio_opt = []
+        for t in opt_ts:
+            audio_opt.append(audio)
+        audio_opt = np.concatenate(audio_opt)
+        max_int16 = 32768
+        audio_opt = (audio_opt * max_int16).astype(np.int16)
+        return audio_opt
+""", encoding="utf8")
+            (root / "infer/vc/modules.py").write_text("""class VC:
+    def __init__(self, config):
+        assert str(config.device) == 'cpu'
+    def vc_single(self, sid, input_audio_path, f0_up_key, f0_method, file_index, index_rate, resample_sr, rms_mix_rate, protect):
+        assert self.n_spk == 2 and sid == 1
+        return 'Success.', (self.tgt_sr, self.pipeline.pipeline(self.hubert_model, self.net_g, sid))
+""", encoding="utf8")
             project = Path(__file__).resolve().parents[1]
             output = root / "converted.wav"
-            env = dict(os.environ, PYTHONPATH=str(project), PYTHONUTF8="1")
+            env = dict(os.environ, PYTHONPATH=str(project), PYTHONUTF8="1", weight_root=str(root / "assets/weights"))
             command = [sys.executable, str(project / "infer/official_upstream_runner.py"),
                        "--official-root", str(root), "--sid", "fixture.pth", "--vocals-path", "fixture.wav",
                        "--output-path", str(output), "--f0-method", "rmvpe", "--pitch-shift", "0",
                        "--index-rate", "0", "--rms-mix-rate", "1", "--protect", ".33",
-                       "--speaker-id", "0", "--device", "cpu"]
+                       "--speaker-id", "1", "--device", "cpu"]
             result = subprocess.run(command, cwd=project, env=env, capture_output=True, text=True,
                                     encoding="utf-8", timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(sf.info(output).frames, 1600)
+            self.assertEqual(sf.info(output).frames, 3200)
+            self.assertEqual(sf.info(output).subtype, 'DOUBLE')
+            command[command.index('--speaker-id') + 1] = '2'
+            invalid = subprocess.run(command, cwd=project, env=env, capture_output=True, text=True,
+                                     encoding='utf8', timeout=60)
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn('id=2, count=2', invalid.stderr)
 
 
 if __name__ == "__main__":

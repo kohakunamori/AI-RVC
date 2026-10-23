@@ -326,7 +326,7 @@ def detect_cuda_version():
             output = r2.stdout
             # 从 nvidia-smi 输出中提取 CUDA Version
             import re
-            match = re.search(r"CUDA Version:\s*(\d+)\.(\d+)", output)
+            match = re.search(r"CUDA(?: UMD)? Version:\s*(\d+)\.(\d+)", output)
             if match:
                 major, minor = int(match.group(1)), int(match.group(2))
                 if (major, minor) < (12, 6):

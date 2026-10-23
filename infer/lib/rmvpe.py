@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from infer.lib import jit
+from infer.rmvpe_boundaries import local_average_cents
 
 try:
     # Fix "Torch not compiled with CUDA enabled"
@@ -427,9 +428,16 @@ class MelSpectrogram(torch.nn.Module):
         mel_fmin=0,
         mel_fmax=None,
         clamp=1e-5,
+        runtime_dtype=None,
     ):
         super().__init__()
         n_fft = win_length if n_fft is None else n_fft
+        self.runtime_dtype = runtime_dtype or (
+            torch.float16 if is_half else torch.float32
+        )
+        self.preprocess_dtype = (
+            torch.float64 if self.runtime_dtype == torch.float64 else torch.float32
+        )
         self.hann_window = {}
         mel_basis = mel(
             sr=sampling_rate,
@@ -439,7 +447,7 @@ class MelSpectrogram(torch.nn.Module):
             fmax=mel_fmax,
             htk=True,
         )
-        mel_basis = torch.from_numpy(mel_basis).float()
+        mel_basis = torch.from_numpy(mel_basis).to(dtype=self.preprocess_dtype)
         self.register_buffer("mel_basis", mel_basis)
         self.n_fft = win_length if n_fft is None else n_fft
         self.hop_length = hop_length
@@ -456,8 +464,10 @@ class MelSpectrogram(torch.nn.Module):
         hop_length_new = int(np.round(self.hop_length * speed))
         keyshift_key = str(keyshift) + "_" + str(audio.device)
         if keyshift_key not in self.hann_window:
-            self.hann_window[keyshift_key] = torch.hann_window(win_length_new).to(
-                audio.device
+            self.hann_window[keyshift_key] = torch.hann_window(
+                win_length_new,
+                device=audio.device,
+                dtype=audio.dtype,
             )
         if "privateuseone" in str(audio.device):
             if not hasattr(self, "stft"):
@@ -486,23 +496,53 @@ class MelSpectrogram(torch.nn.Module):
                 magnitude = F.pad(magnitude, (0, 0, 0, size - resize))
             magnitude = magnitude[:, :size, :] * self.win_length / win_length_new
         mel_output = torch.matmul(self.mel_basis, magnitude)
-        if self.is_half == True:
-            mel_output = mel_output.half()
+        mel_output = mel_output.to(dtype=self.runtime_dtype)
         log_mel_spec = torch.log(torch.clamp(mel_output, min=self.clamp))
         return log_mel_spec
 
 
 class RMVPE:
-    def __init__(self, model_path: str, is_half, device=None, use_jit=False):
+    def __init__(
+        self,
+        model_path: str,
+        is_half,
+        device=None,
+        use_jit=False,
+        runtime_dtype=None,
+    ):
         self.resample_kernel = {}
         self.resample_kernel = {}
         self.is_half = is_half
+        dtype_name = runtime_dtype or ("float16" if is_half else "float32")
+        try:
+            self.runtime_dtype = {
+                "float16": torch.float16,
+                "float32": torch.float32,
+                "float64": torch.float64,
+            }[str(dtype_name)]
+        except KeyError as exc:
+            raise RuntimeError(f"Unsupported adaptive RMVPE runtime dtype: {dtype_name}") from exc
         if device is None:
             device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.device = device
         self.mel_extractor = MelSpectrogram(
-            is_half, 128, 16000, 1024, 160, None, 30, 8000
-        ).to(device)
+            is_half,
+            128,
+            16000,
+            1024,
+            160,
+            None,
+            30,
+            8000,
+            runtime_dtype=self.runtime_dtype,
+        ).to(
+            device=device,
+            dtype=(
+                torch.float64
+                if self.runtime_dtype == torch.float64
+                else torch.float32
+            ),
+        )
         if "privateuseone" in str(device):
             import onnxruntime as ort
 
@@ -516,6 +556,10 @@ class RMVPE:
                 self.device = torch.device("cuda:0")
 
             def get_jit_model():
+                if self.runtime_dtype == torch.float64:
+                    raise RuntimeError(
+                        "RMVPE JIT export has no FP64 contract; refusing a FLOAT32 fallback"
+                    )
                 jit_model_path = model_path.rstrip(".pth")
                 jit_model_path += ".half.jit" if is_half else ".jit"
                 reload = False
@@ -540,14 +584,10 @@ class RMVPE:
                 return model
 
             def get_default_model():
-                model = E2E(4, 1, (2, 2))
+                model = E2E(4, 1, (2, 2)).to(dtype=self.runtime_dtype)
                 ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
                 model.load_state_dict(ckpt)
                 model.eval()
-                if is_half:
-                    model = model.half()
-                else:
-                    model = model.float()
                 return model
 
             if use_jit:
@@ -563,6 +603,16 @@ class RMVPE:
                 self.model = get_default_model()
 
             self.model = self.model.to(device)
+            parameter_dtypes = {
+                parameter.dtype
+                for parameter in self.model.parameters()
+                if parameter.is_floating_point()
+            }
+            if parameter_dtypes != {self.runtime_dtype}:
+                raise RuntimeError(
+                    "RMVPE precision does not match its adaptive checkpoint plan; "
+                    f"expected={self.runtime_dtype}, loaded={sorted(map(str, parameter_dtypes))}"
+                )
         cents_mapping = 20 * np.arange(360) + 1997.3794084376191
         self.cents_mapping = np.pad(cents_mapping, (4, 4))  # 368
 
@@ -580,7 +630,7 @@ class RMVPE:
                     input_feed={onnx_input_name: mel.cpu().numpy()},
                 )[0]
             else:
-                mel = mel.half() if self.is_half else mel.float()
+                mel = mel.to(dtype=self.runtime_dtype)
                 hidden = self.model(mel)
             return hidden[:, :n_frames]
 
@@ -597,7 +647,15 @@ class RMVPE:
         if not torch.is_tensor(audio):
             audio = torch.from_numpy(audio)
         mel = self.mel_extractor(
-            audio.float().to(self.device).unsqueeze(0), center=True
+            audio.to(
+                device=self.device,
+                dtype=(
+                    torch.float64
+                    if self.runtime_dtype == torch.float64
+                    else torch.float32
+                ),
+            ).unsqueeze(0),
+            center=True,
         )
         # print(123123123,mel.device.type)
         # torch.cuda.synchronize()
@@ -620,30 +678,7 @@ class RMVPE:
         return f0
 
     def to_local_average_cents(self, salience, thred=0.05):
-        # t0 = ttime()
-        center = np.argmax(salience, axis=1)  # 帧长#index
-        salience = np.pad(salience, ((0, 0), (4, 4)))  # 帧长,368
-        # t1 = ttime()
-        center += 4
-        todo_salience = []
-        todo_cents_mapping = []
-        starts = center - 4
-        ends = center + 5
-        for idx in range(salience.shape[0]):
-            todo_salience.append(salience[:, starts[idx] : ends[idx]][idx])
-            todo_cents_mapping.append(self.cents_mapping[starts[idx] : ends[idx]])
-        # t2 = ttime()
-        todo_salience = np.array(todo_salience)  # 帧长，9
-        todo_cents_mapping = np.array(todo_cents_mapping)  # 帧长，9
-        product_sum = np.sum(todo_salience * todo_cents_mapping, 1)
-        weight_sum = np.sum(todo_salience, 1)  # 帧长
-        devided = product_sum / weight_sum  # 帧长
-        # t3 = ttime()
-        maxx = np.max(salience, axis=1)  # 帧长
-        devided[maxx <= thred] = 0
-        # t4 = ttime()
-        # print("decode:%s\t%s\t%s\t%s" % (t1 - t0, t2 - t1, t3 - t2, t4 - t3))
-        return devided
+        return local_average_cents(salience, self.cents_mapping, thred)
 
 
 if __name__ == "__main__":

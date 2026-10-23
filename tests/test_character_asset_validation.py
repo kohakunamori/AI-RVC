@@ -92,6 +92,72 @@ class CharacterAssetValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(FileNotFoundError, '缺少 .index'):
                 inspect_character_directory(directory, require_index=True)
 
+    def test_training_template_pair_downloads_and_keeps_original_files(self):
+        import faiss
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(character_models, 'get_project_root', return_value=Path(tmp)):
+            root = Path(tmp)
+            weight = root / 'voice.pth'
+            write_character_fixture(weight)
+            trained = root / 'trained_IVF1_Flat_nprobe_1_voice_v1.index'
+            added = root / 'added_IVF1_Flat_nprobe_1_voice_v1.index'
+            vectors = np.random.default_rng(42).normal(size=(64, 256)).astype(np.float32)
+            index = faiss.IndexIVFFlat(faiss.IndexFlatL2(256), 256, 1)
+            index.train(vectors)
+            faiss.write_index(index, str(trained))
+            index.add(vectors)
+            faiss.write_index(index, str(added))
+            archive = root / 'voice.zip'
+            with zipfile.ZipFile(archive, 'w') as stream:
+                for path in (weight, trained, added):
+                    stream.write(path, 'nested/' + path.name)
+            with patch.dict(character_models.CHARACTER_MODELS, {'fixture': {'file': 'voice.zip'}}), \
+                 patch.object(character_models, 'hf_hub_download', return_value=str(archive)):
+                self.assertTrue(character_models.download_character_model('fixture'))
+            target = root / 'assets/weights/characters/fixture'
+            paths = character_models.get_character_model_path('fixture')
+            self.assertEqual(Path(paths['index_path']).name, added.name)
+            self.assertEqual(inspect_character_directory(target)['index_vectors'], 64)
+            for original in (weight, trained, added):
+                self.assertEqual((target / original.name).read_bytes(), original.read_bytes())
+
+    def test_nonempty_training_index_is_still_ambiguous_and_invalidates_cache(self):
+        import faiss
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'voice.pth').write_bytes(b'weight')
+            trained = root / 'trained_voice.index'
+            added = root / 'added_voice.index'
+            vectors = np.random.default_rng(42).normal(size=(64, 256)).astype(np.float32)
+            index = faiss.IndexIVFFlat(faiss.IndexFlatL2(256), 256, 1)
+            index.train(vectors)
+            faiss.write_index(index, str(trained))
+            index.add(vectors)
+            faiss.write_index(index, str(added))
+            self.assertEqual(model_files(root)[1], added)
+            faiss.write_index(index, str(trained))
+            with self.assertRaisesRegex(ValueError, '多个索引'):
+                model_files(root)
+
+    def test_training_prefix_does_not_hide_unmatched_extra_or_corrupt_indices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'voice.pth').write_bytes(b'weight')
+            (root / 'added_voice.index').write_bytes(b'index')
+            trained = root / 'trained_other.index'
+            trained.write_bytes(b'not-an-index')
+            with self.assertRaisesRegex(ValueError, '多个索引'):
+                model_files(root)
+            trained = trained.rename(root / 'trained_voice.index')
+            with self.assertRaises(RuntimeError):
+                model_files(root)
+            (root / 'extra.index').write_bytes(b'index')
+            with self.assertRaisesRegex(ValueError, '多个索引'):
+                model_files(root)
+
 
 if __name__ == '__main__':
     unittest.main()

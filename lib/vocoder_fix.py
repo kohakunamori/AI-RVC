@@ -55,7 +55,7 @@ def fix_phase_discontinuity(audio: np.ndarray, sr: int, chunk_boundaries: Option
 
     # 用校正后的相位重建信号
     corrected_signal = amplitude * np.exp(1j * phase_corrected)
-    result = np.real(corrected_signal).astype(np.float32)
+    result = np.real(corrected_signal).astype(np.float64 if audio.dtype == np.float64 else np.float32)
 
     return result
 

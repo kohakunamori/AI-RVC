@@ -7,7 +7,7 @@
         "settings": "Settings"
     },
     "ui": {
-        "cover_usage": "Upload a song and choose a character to convert the lead vocal and generate a cover with separate audio tracks.\n\n1. Download a character model or import your own.\n2. Upload an MP3, WAV, or FLAC song.\n3. Choose a character and select Start Cover.\n\nSeparation models are downloaded when first needed. Download progress appears in the application log.",
+        "cover_usage": "Upload a song or vocal recording and choose the voice to convert it to.\n\n1. Download a character model or import your own.\n2. Choose Full song or Vocals only, then upload MP3, WAV or FLAC audio.\n3. Select a character and click Start Cover.\n\nFull songs include separation and mixing. Vocals-only mode exports the input and converted vocals. Required models download on first use; progress appears in the runtime log.",
         "series_filter": "Series / Category",
         "keyword_search": "Keyword Search",
         "keyword_placeholder": "Character or series name",
@@ -76,9 +76,9 @@
         "song_cover": "AI Song Cover",
         "cover_description": "Upload a song and choose a character to convert the lead vocal and create a cover.",
         "automatic_cover_settings": "Default Processing Settings",
-        "automatic_cover_settings_info": "Upload a song and choose a character to begin. Expand Manual adjustments to change the settings.",
+        "automatic_cover_settings_info": "Choose an input type, upload audio and select a character to start. Open Manual settings to adjust the result.",
         "manual_cover_settings": "Manual Adjustments (Optional)",
-        "upload_song": "Upload Song",
+        "upload_song": "Upload audio",
         "input_song": "Input Song (MP3/WAV/FLAC)",
         "select_character": "Select Character",
         "character": "Character",
@@ -132,10 +132,16 @@
         "vc_preprocess_status": "Processing workflow",
         "vc_preprocess_status_info": "Shows the selected processing steps. Check model availability in Model management.",
         "vc_pipeline_mode": "Conversion mode",
-        "vc_pipeline_mode_info": "Standard cover supports harmony separation and vocal post-processing. The official RVC route uses UVR5 separation without those steps.",
+        "vc_pipeline_mode_info": "For full songs, the standard route includes backing-vocal separation and vocal cleanup; the official route uses UVR5. Vocals-only input goes directly to voice conversion.",
         "vc_pipeline_mode_current": "Standard cover (recommended)",
         "vc_pipeline_mode_official": "Official RVC route",
-        "processing_details": "Model and runtime details"
+        "processing_details": "Model and runtime details",
+        "input_mode": "Input type",
+        "input_mode_song": "Full song",
+        "input_mode_vocals": "Vocals only",
+        "input_audio": "Song or vocal audio",
+        "input_mode_info": "Vocals go directly to voice conversion, with input and converted vocals as outputs. Full songs include separation and mixing.",
+        "input_vocals": "Input vocals"
     },
     "models": {
         "base_models": "Base Models",
@@ -226,7 +232,8 @@
         "converting_vocals": "Converting vocals...",
         "mixing_audio": "Mixing audio...",
         "invalid_ui_number": "{field} must be a number between {minimum} and {maximum}.",
-        "invalid_ui_integer": "{field} must be an integer between {minimum} and {maximum}."
+        "invalid_ui_integer": "{field} must be an integer between {minimum} and {maximum}.",
+        "vocals_complete_status": "✅ Vocal conversion complete. Input and converted vocals are ready."
     },
     "character_details": {
         "compatibility": "Compatibility check",
@@ -277,7 +284,8 @@
         "auto_route_missing_title": "The dereverb component cannot be imported",
         "auto_route_missing_reason": "Check the audio-separator installation.",
         "configured_route_flow": "Separation model: {separator}; harmony separation: {karaoke} → Stereo De-Reverb 22.5050 → RVC conversion → mix",
-        "local_configured_route_flow": "Separation model: {separator}; harmony separation: {karaoke} → Stereo De-Reverb 22.5050 → local RVC conversion → vocal post-processing → mix"
+        "local_configured_route_flow": "Separation model: {separator}; harmony separation: {karaoke} → Stereo De-Reverb 22.5050 → local RVC conversion → vocal post-processing → mix",
+        "vocals_route": "Vocal conversion\nInput vocals → RVC → Converted vocals\nPitch, index, speaker, protection and loudness settings apply. Separation, dereverb and final mixing are skipped."
     },
     "device_info": {
         "pytorch_version": "PyTorch version: {version}",
@@ -338,7 +346,9 @@
         "errorDetails": "Error details",
         "waveformHttpFailed": "Could not load audio for the waveform (HTTP {status})",
         "waveformDataInvalid": "Waveform data contains no peaks",
-        "mediaTrackFailed": "Could not load {name} (error code {code})"
+        "mediaTrackFailed": "Could not load {name} (error code {code})",
+        "vocalsDescription": "Listen to the converted vocals, or add the input vocals for comparison.",
+        "audioStemInputVocals": "Input vocals"
     },
     "accessibility": {
         "upload": "Upload file",

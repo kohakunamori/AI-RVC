@@ -8,6 +8,17 @@ import install
 
 
 class CudaInstallArchitectureTests(unittest.TestCase):
+    def test_new_driver_umd_version_header(self):
+        def run(command, **_kwargs):
+            if command == ["nvidia-smi"]:
+                return mock.Mock(returncode=0, stdout="KMD Version: 617.42  CUDA UMD Version: 13.4")
+            if "--query-gpu=compute_cap" in command:
+                return mock.Mock(returncode=0, stdout="8.9\n")
+            return mock.Mock(returncode=0, stdout="617.42\n")
+
+        with mock.patch("install.subprocess.run", side_effect=run):
+            self.assertEqual(install.detect_cuda_version(), "https://download.pytorch.org/whl/cu126")
+
     def test_driver_and_architecture_matrix(self):
         cases = (
             ("13.0", "12.0", "cu128"),

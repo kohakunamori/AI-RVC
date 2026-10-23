@@ -256,9 +256,11 @@ class MultiHeadAttention(nn.Module):
             scores = scores + scores_local
         if self.proximal_bias:
             assert t_s == t_t, "Proximal bias is only available for self-attention."
-            scores = scores + self._attention_bias_proximal(t_s).to(
-                device=scores.device, dtype=scores.dtype
-            )
+            scores = scores + self._attention_bias_proximal(
+                t_s,
+                dtype=scores.dtype,
+                device=scores.device,
+            ).to(dtype=scores.dtype)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e4)
             if self.block_length is not None:
@@ -373,14 +375,22 @@ class MultiHeadAttention(nn.Module):
         x_final = x_flat.view([batch, heads, length, 2 * length])[:, :, :, 1:]
         return x_final
 
-    def _attention_bias_proximal(self, length: int):
+    def _attention_bias_proximal(
+        self,
+        length: int,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | None = None,
+    ):
         """Bias for self-attention to encourage attention to close positions.
         Args:
           length: an integer scalar.
         Returns:
           a Tensor with shape [1, 1, length, length]
         """
-        r = torch.arange(length, dtype=torch.float32)
+        # Preserve the historical FP32 calculation for FP16/BF16 models, but
+        # do not manufacture an FP64 attention bias from rounded FP32 values.
+        compute_dtype = torch.float64 if dtype == torch.float64 else torch.float32
+        r = torch.arange(length, dtype=compute_dtype, device=device)
         diff = torch.unsqueeze(r, 0) - torch.unsqueeze(r, 1)
         return torch.unsqueeze(torch.unsqueeze(-torch.log1p(torch.abs(diff)), 0), 0)
 

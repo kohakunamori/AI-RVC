@@ -5,6 +5,7 @@
 import numpy as np
 import librosa
 import soundfile as sf
+from numba import njit
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,141 @@ try:
     PEDALBOARD_AVAILABLE = True
 except ImportError:
     PEDALBOARD_AVAILABLE = False
+
+
+_JUCE_COMB_TUNINGS_44100 = (1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617)
+_JUCE_ALLPASS_TUNINGS_44100 = (556, 441, 341, 225)
+_JUCE_STEREO_SPREAD_44100 = 23
+
+
+def _delay_samples(tuning: int, sr: int, channel: int) -> int:
+    """Return the exact integer delay used by JUCE's FreeVerb implementation."""
+    spread = _JUCE_STEREO_SPREAD_44100 if channel == 1 else 0
+    return (int(sr) * (int(tuning) + spread)) // 44100
+
+
+@njit(cache=True, nogil=True)
+def _juce_reverb_kernel_float64(
+    source: np.ndarray,
+    comb_delays: np.ndarray,
+    allpass_delays: np.ndarray,
+    damping: float,
+    feedback: float,
+    wet_gain: float,
+    dry_gain: float,
+) -> np.ndarray:
+    """Compiled sample loop matching JUCE Reverb's comb/all-pass topology."""
+    channel_count, sample_count = source.shape
+    processed = np.empty_like(source)
+    max_comb_delay = int(np.max(comb_delays))
+    max_allpass_delay = int(np.max(allpass_delays))
+
+    for channel in range(channel_count):
+        comb_buffers = np.zeros((8, max_comb_delay), dtype=np.float64)
+        comb_indices = np.zeros(8, dtype=np.int64)
+        comb_last = np.zeros(8, dtype=np.float64)
+        allpass_buffers = np.zeros((4, max_allpass_delay), dtype=np.float64)
+        allpass_indices = np.zeros(4, dtype=np.int64)
+
+        for sample_index in range(sample_count):
+            if channel_count == 1:
+                filter_input = source[0, sample_index] * 0.015
+            else:
+                filter_input = (
+                    source[0, sample_index] + source[1, sample_index]
+                ) * 0.015
+
+            wet_sample = 0.0
+            for filter_index in range(8):
+                buffer_index = comb_indices[filter_index]
+                delayed = comb_buffers[filter_index, buffer_index]
+                state = (
+                    delayed * (1.0 - damping)
+                    + comb_last[filter_index] * damping
+                )
+                comb_last[filter_index] = state
+                comb_buffers[filter_index, buffer_index] = (
+                    filter_input + state * feedback
+                )
+                buffer_index += 1
+                if buffer_index >= comb_delays[channel, filter_index]:
+                    buffer_index = 0
+                comb_indices[filter_index] = buffer_index
+                wet_sample += delayed
+
+            for filter_index in range(4):
+                buffer_index = allpass_indices[filter_index]
+                delayed = allpass_buffers[filter_index, buffer_index]
+                state = wet_sample + delayed * 0.5
+                allpass_buffers[filter_index, buffer_index] = state
+                buffer_index += 1
+                if buffer_index >= allpass_delays[channel, filter_index]:
+                    buffer_index = 0
+                allpass_indices[filter_index] = buffer_index
+                wet_sample = delayed - wet_sample
+
+            processed[channel, sample_index] = (
+                wet_sample * wet_gain + source[channel, sample_index] * dry_gain
+            )
+
+    return processed
+
+
+def _apply_juce_reverb_float64(
+    audio: np.ndarray,
+    sr: int,
+    room_size: float,
+    wet_level: float,
+) -> np.ndarray:
+    """Run Pedalboard's JUCE/FreeVerb algorithm natively in FLOAT64.
+
+    Pedalboard's built-in effects use JUCE float buffers and therefore always
+    return FLOAT32.  This implementation keeps the same delay tunings,
+    feedback/damping law, gain staging, stereo spread, width, and output length
+    while evaluating the same sample loop in a compiled FLOAT64 Numba kernel.
+    """
+    source = np.asarray(audio)
+    if source.dtype != np.dtype("float64"):
+        raise TypeError("FLOAT64 reverb requires a FLOAT64 source array")
+    if int(sr) <= 0:
+        raise ValueError("reverb sample rate must be positive")
+    if not 0.0 <= float(room_size) <= 1.0:
+        raise ValueError("room_size must be between 0 and 1")
+    if not 0.0 <= float(wet_level) <= 1.0:
+        raise ValueError("wet_level must be between 0 and 1")
+
+    if source.ndim == 1:
+        source = source.reshape(1, -1)
+    if source.ndim != 2 or source.shape[0] not in (1, 2):
+        raise ValueError("reverb audio must contain one or two channels")
+
+    damping = 0.5 * 0.4
+    feedback = float(room_size) * 0.28 + 0.7
+    wet_gain = float(wet_level) * 3.0
+    dry_gain = (1.0 - float(wet_level)) * 2.0
+    comb_delays = np.asarray(
+        [
+            [_delay_samples(tuning, sr, channel) for tuning in _JUCE_COMB_TUNINGS_44100]
+            for channel in range(source.shape[0])
+        ],
+        dtype=np.int64,
+    )
+    allpass_delays = np.asarray(
+        [
+            [_delay_samples(tuning, sr, channel) for tuning in _JUCE_ALLPASS_TUNINGS_44100]
+            for channel in range(source.shape[0])
+        ],
+        dtype=np.int64,
+    )
+    return _juce_reverb_kernel_float64(
+        np.ascontiguousarray(source),
+        comb_delays,
+        allpass_delays,
+        damping,
+        feedback,
+        wet_gain,
+        dry_gain,
+    )
 
 
 def _probe_sample_rate(path: str) -> int:
@@ -47,10 +183,31 @@ def load_audio_for_mix(path: str, target_sr: Optional[int] = None) -> tuple:
     if log:
         log.detail(f"加载音频: {Path(path).name}")
 
-    audio, sr = librosa.load(path, sr=target_sr, mono=False)
+    try:
+        info = sf.info(path)
+    except Exception:
+        # Formats outside libsndfile (for example some browser MP3 inputs) are
+        # decoded through librosa.  Once libsndfile has positively identified a
+        # container, failures must propagate instead of silently narrowing a
+        # damaged DOUBLE/PCM32 file to librosa's float32 representation.
+        audio, sr = librosa.load(path, sr=target_sr, mono=False)
+        audio = np.asarray(audio, dtype=np.float32)
+    else:
+        dtype = "float64" if str(info.subtype).upper() in {"DOUBLE", "PCM_32"} else "float32"
+        decoded, sr = sf.read(path, dtype=dtype, always_2d=True)
+        audio = decoded.T
+        if target_sr is not None and int(target_sr) > 0 and sr != int(target_sr):
+            audio = librosa.resample(
+                audio,
+                orig_sr=sr,
+                target_sr=int(target_sr),
+                axis=-1,
+            ).astype(dtype, copy=False)
+            sr = int(target_sr)
 
-    if audio.ndim == 1:
-        audio = np.stack([audio, audio])
+    if audio.ndim == 1 or audio.shape[0] == 1:
+        mono = audio.reshape(-1)
+        audio = np.stack([mono, mono])
         if log:
             log.detail("单声道已扩展为双声道")
 
@@ -67,19 +224,22 @@ def apply_reverb(
     wet_level: float = 0.2,
 ) -> np.ndarray:
     """对人声应用混响效果。"""
-    if not PEDALBOARD_AVAILABLE:
-        raise RuntimeError("已请求混响，但 Pedalboard 未安装或无法加载；不会跳过混响")
-
     if log:
         log.detail(f"应用混响: room_size={room_size}, wet_level={wet_level}")
 
     if audio.ndim == 1:
         audio = audio.reshape(1, -1)
 
-    board = Pedalboard([
-        Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0 - wet_level)
-    ])
-    processed = board(audio, sr)
+    if audio.dtype == np.dtype("float64"):
+        processed = _apply_juce_reverb_float64(audio, sr, room_size, wet_level)
+    else:
+        if not PEDALBOARD_AVAILABLE:
+            raise RuntimeError("Pedalboard 不可用，无法执行 FLOAT32 混响处理")
+
+        board = Pedalboard([
+            Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0 - wet_level)
+        ])
+        processed = board(audio, sr)
 
     if log:
         log.detail("混响处理完成")
@@ -201,7 +361,13 @@ def mix_vocals_and_accompaniment(
     if log:
         log.progress(f"保存混音文件: {output_path}")
 
-    sf.write(output_path, mixed, sr, subtype="FLOAT")
+    output_dtype = np.float64 if mixed.dtype == np.dtype("float64") else np.float32
+    sf.write(
+        output_path,
+        mixed.astype(output_dtype, copy=False),
+        sr,
+        subtype="DOUBLE" if output_dtype == np.float64 else "FLOAT",
+    )
 
     output_size = Path(output_path).stat().st_size
     duration = target_len / sr

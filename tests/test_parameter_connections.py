@@ -21,7 +21,7 @@ class ParameterConnectionTests(unittest.TestCase):
                     pipeline = module.CoverPipeline('cpu')
                     pipeline.temp_dir = root / 'sessions'
                     with (
-                        patch.object(module.torch, 'load', return_value={}),
+                        patch('infer.rvc_checkpoint.safe_load_rvc_checkpoint', return_value={}),
                         patch('infer.contracts.inspect_checkpoint', return_value=SimpleNamespace(speaker_count=1, uses_f0=True)),
                         patch.object(module, 'separate_uvr5_official_upstream', side_effect=RuntimeError('selected UVR5')) as uvr5,
                         patch.object(pipeline, '_init_separator', side_effect=AssertionError('wrong separator')),
