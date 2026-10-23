@@ -85,7 +85,7 @@ def main() -> None:
             checksum = directory / f"{name}-Portable.SHA256SUMS"
             entries = {}
             for line in checksum.read_text(encoding="utf-8").splitlines():
-                match = re.fullmatch(r"([0-9a-f]{64})\s+\*?([^/\\]+)", line)
+                match = re.fullmatch(r"([0-9a-f]{64})\s+\*?(?:\./)?([^/\\]+)", line)
                 if not match:
                     raise RuntimeError(f"Invalid checksum line in {checksum.name}")
                 digest, filename = match.groups()

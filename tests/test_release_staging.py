@@ -45,7 +45,7 @@ class ReleaseStagingTests(unittest.TestCase):
                 data = name.encode()
                 (directory / filename).write_bytes(data)
                 digest = "0" * 64 if self.corrupt else hashlib.sha256(data).hexdigest()
-                (directory / f"{name}-Portable.SHA256SUMS").write_text(f"{digest}  {filename}\n")
+                (directory / f"{name}-Portable.SHA256SUMS").write_text(f"{digest}  ./{filename}\n")
         elif args[:2] == ("release", "upload"):
             path = Path(args[3])
             self.uploaded.append(path.name)
