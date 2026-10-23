@@ -45,9 +45,20 @@ def main() -> None:
     version = base64.b64decode(api(f"{prefix}/contents/VERSION?ref={source}")["content"]).decode().strip()
     if tag != f"v{version}":
         raise RuntimeError("Release tag differs from the built source VERSION")
-    # GitHub's by-tag REST endpoint excludes unpublished releases without a tag.
-    # gh resolves those drafts through the release list; subsequent reads use ID.
-    release_id = json.loads(gh("release", "view", tag, "--repo", repository, "--json", "id"))["id"]
+    # The by-tag endpoint excludes untagged drafts; resolve the numeric REST ID
+    # from the authenticated release list, not gh's GraphQL node ID.
+    page = 1
+    while True:
+        releases = api(f"{prefix}/releases?per_page=100&page={page}")
+        matches = [release for release in releases if release["tag_name"] == tag]
+        if matches:
+            if len(matches) != 1:
+                raise RuntimeError("Release destination is ambiguous")
+            release_id = matches[0]["id"]
+            break
+        if len(releases) < 100:
+            raise RuntimeError("The requested release draft does not exist")
+        page += 1
 
     def draft():
         release = api(f"{prefix}/releases/{release_id}")
