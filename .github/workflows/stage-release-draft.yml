@@ -30,10 +30,21 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Download the four original build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        timeout-minutes: 20
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.run_id }}
+          pattern: AI-RVC-*
+          path: ${{ runner.temp }}/ai-rvc-stage-artifacts
+          digest-mismatch: error
       - name: Verify existing artifacts and attach unchanged files to the draft
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ inputs.run_id }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          STAGED_ARTIFACT_DIRECTORY: ${{ runner.temp }}/ai-rvc-stage-artifacts
         run: python3 tools/stage_release_draft.py

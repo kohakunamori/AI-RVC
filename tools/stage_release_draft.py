@@ -76,8 +76,13 @@ def main() -> None:
         raise RuntimeError("A source artifact has expired")
 
     with tempfile.TemporaryDirectory(prefix="ai-rvc-stage-") as workspace:
-        root = Path(workspace)
-        gh("run", "download", run_id, "--repo", repository, "--dir", str(root))
+        downloaded = os.environ.get("STAGED_ARTIFACT_DIRECTORY")
+        root = Path(downloaded).resolve() if downloaded else Path(workspace)
+        if downloaded:
+            if not root.is_dir() or {item.name for item in root.iterdir() if item.is_dir()} != expected:
+                raise RuntimeError("The download directory must contain exactly the four expected artifact directories")
+        else:
+            gh("run", "download", run_id, "--repo", repository, "--dir", str(root))
         verified = {}
         uploads = []
         for name in sorted(expected):

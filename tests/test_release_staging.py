@@ -2,6 +2,7 @@ import base64
 import copy
 import hashlib
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,7 @@ class ReleaseStagingTests(unittest.TestCase):
         self.version = "1.6.0"
         self.corrupt = False
         self.uploaded = []
+        self.downloads = 0
 
     def api(self, path):
         if "/artifacts?" in path:
@@ -37,6 +39,7 @@ class ReleaseStagingTests(unittest.TestCase):
 
     def gh(self, *args):
         if args[:2] == ("run", "download"):
+            self.downloads += 1
             root = Path(args[-1])
             for name in self.names:
                 directory = root / name
@@ -70,6 +73,19 @@ class ReleaseStagingTests(unittest.TestCase):
         self.execute()
         self.assertEqual(len(self.uploaded), 9)
         self.assertTrue(self.release["draft"])
+
+    def test_pre_downloaded_artifacts_use_the_same_integrity_checks(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, STAGED_ARTIFACT_DIRECTORY=directory):
+            self.gh("run", "download", "123", "--dir", directory)
+            self.execute()
+            self.assertEqual(self.downloads, 1)
+            self.assertEqual(len(self.uploaded), 9)
+
+    def test_pre_downloaded_directory_rejects_extra_packages(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, STAGED_ARTIFACT_DIRECTORY=directory):
+            self.gh("run", "download", "123", "--dir", directory)
+            (Path(directory) / "unexpected").mkdir()
+            self.reject()
 
     def test_incomplete_build_is_rejected(self):
         self.run["status"] = "in_progress"
