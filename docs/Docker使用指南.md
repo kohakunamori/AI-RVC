@@ -2,6 +2,8 @@
 
 当前源码为 **1.6.0 候选版**，提供 Linux x86-64 的 CPU、NVIDIA CUDA 构建。根目录 Compose 默认标签为 `ghcr.io/mason369/ai-rvc:1.6.0-cuda`，CPU 文件为 `ghcr.io/mason369/ai-rvc:1.6.0-cpu`；两种新标签尚未正式发布。候选阶段请使用下文的 `docker compose build`，或检出稳定版 `v1.5.1` 后按其配套 Compose 拉取已发布镜像。不要把 1.5.1 的验收结果当作 1.6.0 的成品验收；当前状态见 [发布准备](发布准备.md)。
 
+两种运行镜像均安装 `libatomic1`，供 Pedalboard 音频效果组件加载。候选验收实际复现过缺少 `libatomic.so.1` 的导入失败；成品检查直接导入 Pedalboard，并继续运行 Float32 / Float64 混响数值回归。
+
 以下两段记录的是已公开的 [v1.5.1 Release](https://github.com/mason369/AI-RVC/releases/tag/v1.5.1) 及 `1.5.1-cpu` / `1.5.1-cuda` 镜像。
 
 两种正式 GHCR 镜像已经公开，[发布工作流](https://github.com/mason369/AI-RVC/actions/runs/34028914300)中的 CPU/CUDA 作业各通过 **343 项回归**。两种公开成品均已使用空登录配置匿名拉取，核对版本、源码提交和镜像摘要，再以 UID 1000 断网完成默认六模型和官方 UVR5＋RVC 两条完整翻唱路线，共验证 **22 个 Float32 输出**。同标签本地构建另有各 343 项回归和 22 个输出记录，详情见[平台验收](平台适配与验收.md)。网页、登录、NGINX 子路径、下载、持久化、镜像导入和数据恢复另有候选阶段的实际记录。本机使用 WSL2 Engine，这不等于所有 Docker 宿主机都已实测。

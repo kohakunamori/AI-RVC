@@ -44,7 +44,7 @@ LABEL org.opencontainers.image.title="AI-RVC" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$REVISION
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates ffmpeg git libsamplerate0 libsndfile1 libgomp1 tini \
+    ca-certificates ffmpeg git libsamplerate0 libsndfile1 libgomp1 libatomic1 tini \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 rvc && useradd --uid 1000 --gid 1000 --create-home rvc
 COPY --from=dependencies /opt/venv /opt/venv

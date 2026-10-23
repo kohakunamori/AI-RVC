@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: |
           docker run --rm ai-rvc:test python -m pip check
-          docker run --rm ai-rvc:test python -c "import os, torch, torchvision, torchaudio; from audio_separator.separator import Separator; assert os.getuid() == 1000; assert os.path.isfile('/data/config.json'); print(torch.__version__)"
+          docker run --rm ai-rvc:test python -c "import os, torch, torchvision, torchaudio; from audio_separator.separator import Separator; from pedalboard import Pedalboard, Reverb; assert os.getuid() == 1000; assert os.path.isfile('/data/config.json'); print(torch.__version__)"
           docker create --name ai-rvc-resources ai-rvc:test
           mkdir -p ui/multitrack/dist
           docker cp ai-rvc-resources:/app/ui/multitrack/dist/player.html ui/multitrack/dist/player.html
