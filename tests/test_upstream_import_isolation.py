@@ -84,7 +84,8 @@ for name, old_module in zip(names, old_modules):
     module = importlib.import_module(name + '.probe')
     assert inspect.getmodule(module.locate.__code__) is module
     assert inspect.getmodule(old_module.locate.__code__) is None
-    assert Path(inspect.getfile(module.locate)).is_relative_to(Path({str(upstream)!r}))
+    # Activation resolves macOS temp symlinks and Windows short directory names.
+    assert Path(inspect.getfile(module.locate)).resolve().is_relative_to(Path({str(upstream)!r}).resolve())
 assert inspect.getmodule(audit_dependency.locate.__code__) is audit_dependency
 """
                 result = subprocess.run(
