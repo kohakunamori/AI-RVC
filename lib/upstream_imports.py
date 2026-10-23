@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import inspect
 import sys
 from pathlib import Path
 
@@ -33,6 +34,16 @@ def activate_upstream_packages(root: Path) -> None:
     for name in list(sys.modules):
         if name.split(".", 1)[0] in names:
             del sys.modules[name]
+    # inspect caches module names independently of sys.modules. A replaced
+    # namespace package has no __file__; retaining its old application path
+    # makes lazy_loader's stack inspection call getfile(namespace) and fail.
+    # Also discard reverse mappings so old code cannot resolve to a new module.
+    for name in list(inspect._filesbymodname):
+        if name.split(".", 1)[0] in names:
+            del inspect._filesbymodname[name]
+    for filename, name in list(inspect.modulesbyfile.items()):
+        if name.split(".", 1)[0] in names:
+            del inspect.modulesbyfile[filename]
     for name, spec in specs.items():
         sys.modules[name] = importlib.util.module_from_spec(spec)
     for name, spec in specs.items():
