@@ -9,10 +9,12 @@
 - 修正 Actions 把整个前端开发目录打进成品的问题：仅收集界面 Python 文件和内联播放器 HTML，与本地 spec 对齐。通过显式 `--packaged` 区分构建前源码检查与成品检查；成品拒绝缺少播放器或夹带 `node_modules`，避免附带无关的构建器及不适用的 musl 原生依赖。
 - 保持版本号 `1.6.0`，重建原 Windows/Linux CPU/GPU 四种便携包；详细检查范围见发布准备文档。GPU 包的托管 CPU 冒烟和 NVRTC 检查不冒充显卡推理验收。
 - 增加显式的同版本便携包替换工作流，绑定成功构建及预期旧提交，核对四包原始 artifact、分卷摘要和远端上传结果。全部新分卷通过后才切换下载名和原标签；失败恢复旧资产名与元数据，操作记录保留在 Actions。原正常发布保护和容器镜像不变。
+- 增加独立原包浏览器验收工作流：从成功构建下载 Windows CPU 原始分卷，校验压缩包与解压后完整清单，在独立中文目录启动原样 EXE，用 Chrome 检查两种语言、语言保存与内嵌播放器，保存截图及浏览器、应用日志；不重新构建或修改发行包。
 
 ### English
 
 - Fix Numba's `cannot cache function / no locator available` when the archived mixer uses a relative source path and the system user cache is unavailable outside the source checkout. Import the mixer and cached librosa/resampy modules from bundled source files, preserving JIT, disk caching, Float64 precision and the reverb algorithm.
+- Add a separate original-package browser workflow: download the Windows CPU volumes from a successful build, verify archive hashes and the full extracted inventory, launch the untouched executable from a separate Unicode directory, and check both locales, saved language and the embedded player in Chrome. Preserve screenshots and browser/application logs without rebuilding or modifying release archives.
 - Require actual frozen-runtime checks in both the local spec and Actions: a separate Unicode directory, cold cache, Float32/Float64 reverb parity, real resampling, DOUBLE WAV mixing, both localized HTTP interfaces and second-process cache hits. Regressions reproduce the archived-path failure and verify source-backed execution; worker help checks remain.
 - Align Actions with the local spec by collecting only UI Python files and the self-contained player HTML. An explicit `--packaged` flag separates source preparation from runtime validation. Reject packages with a missing player or frontend `node_modules`, avoiding unrelated build tools and incompatible musl native dependencies in runtime archives.
 - Keep version 1.6.0 and rebuild the existing Windows/Linux CPU/GPU portable variants. Hosted CPU smoke tests and NVRTC compilation do not claim GPU inference acceptance.
