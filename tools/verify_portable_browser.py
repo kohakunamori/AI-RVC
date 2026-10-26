@@ -123,7 +123,7 @@ def verify(package: Path, output: Path) -> None:
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
     url = f'http://127.0.0.1:{port}'
-    working = output / '外部启动目录'
+    working = output / 'launch-中文'
     working.mkdir()
     env = dict(os.environ, PYTHONPATH='', PYTHONHOME='', AI_RVC_DEVICE='cpu',
                HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', GRADIO_ANALYTICS_ENABLED='False')
