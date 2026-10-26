@@ -14,6 +14,15 @@ from lib.console_i18n import console_print as print
 from lib.console_i18n import localize_console_message
 
 
+def validate_runtime_layout(runtime_root: Path) -> None:
+    """Ship the self-contained player, without native frontend build tools."""
+    player = runtime_root / "ui/multitrack/dist/player.html"
+    if not player.is_file():
+        raise RuntimeError(f"Bundled multitrack player is missing: {player}")
+    if (runtime_root / "ui/multitrack/node_modules").exists():
+        raise RuntimeError("Frontend node_modules must not be distributed in the portable runtime")
+
+
 def validate_upstream_sources(project_root: Path) -> int:
     manifest_path = Path(upstream_runtime.__file__).with_name("upstream_source_manifest.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -107,6 +116,7 @@ def main() -> None:
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--cuda", metavar="MAJOR.MINOR", help=localize_console_message("额外验证包内 CUDA NVRTC 编译库"))
     args = parser.parse_args()
+    validate_runtime_layout(args.project_root.resolve())
     count = validate_upstream_sources(args.project_root.resolve())
     print(f"已核对 VC/UVR5 固定源码，共 {count} 个文件")
     if args.cuda:

@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, str(Path(SPEC).resolve().parent))
 from tools.package_runtime import validate_upstream_sources
 from tools.package_runtime import validate_cuda_runtime
+from tools.package_runtime import validate_runtime_layout
 from tools.verify_packaged_runtime import verify as verify_packaged_runtime
 
 import torch
@@ -123,6 +124,7 @@ coll = COLLECT(
     name='AI-RVC',
 )
 
+validate_runtime_layout(Path(DISTPATH) / 'AI-RVC' / '_internal')
 validate_upstream_sources(Path(DISTPATH) / 'AI-RVC' / '_internal')
 if torch.version.cuda:
     validate_cuda_runtime(Path(DISTPATH) / 'AI-RVC' / '_internal', torch.version.cuda)

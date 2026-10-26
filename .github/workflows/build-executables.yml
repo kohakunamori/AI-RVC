@@ -305,7 +305,8 @@ jobs:
         pyinstaller --name "${NAME}" \
           --onedir \
           --additional-hooks-dir tools/pyinstaller_hooks \
-          --add-data "ui${SEP}ui" \
+          --add-data "ui/*.py${SEP}ui" \
+          --add-data "ui/multitrack/dist/player.html${SEP}ui/multitrack/dist" \
           --add-data "infer${SEP}infer" \
           --add-data "lib${SEP}lib" \
           --add-data "models${SEP}models" \

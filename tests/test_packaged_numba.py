@@ -64,6 +64,24 @@ print(json.dumps(check_audio(output)))
         self.assertIn('python tools/verify_packaged_runtime.py "${EXE}"', workflow)
         self.assertIn("tools/pyinstaller_hooks", workflow)
         self.assertIn("'pyinstaller_hooks'", spec)
+        self.assertIn('--add-data "ui/*.py${SEP}ui"', workflow)
+        self.assertIn('--add-data "ui/multitrack/dist/player.html${SEP}ui/multitrack/dist"', workflow)
+        self.assertNotIn('--add-data "ui${SEP}ui"', workflow)
+
+    def test_package_layout_requires_built_player_and_rejects_development_dependencies(self):
+        from tools.package_runtime import validate_runtime_layout
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, "player is missing"):
+                validate_runtime_layout(root)
+            player = root / "ui/multitrack/dist/player.html"
+            player.parent.mkdir(parents=True)
+            player.write_text("<!doctype html><html>bundled player</html>", encoding="utf-8")
+            validate_runtime_layout(root)
+            (root / "ui/multitrack/node_modules").mkdir()
+            with self.assertRaisesRegex(RuntimeError, "node_modules"):
+                validate_runtime_layout(root)
 
 
 if __name__ == "__main__":
