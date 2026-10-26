@@ -7,12 +7,14 @@
 - 修复在其他电脑或源码目录之外启动时，`lib\\mixer.py` 的 Numba 内核因相对源码路径及不可用的用户缓存报 `cannot cache function / no locator available`。混音模块及同样使用缓存的 librosa、resampy 改为从包内真实源码加载；保留 JIT、磁盘缓存、Float64 精度及原混响算法。
 - 本地 spec 与 GitHub Actions 均增加实际冻结程序验收：独立中文目录、冷缓存、Float32/Float64 混响数值对照、真实重采样、DOUBLE WAV 混音、中英文 HTTP 启动，以及第二进程命中编译缓存。补充旧归档路径失败与新源码路径成功的回归；工作进程帮助命令继续保留。
 - 保持版本号 `1.6.0`，重建原 Windows/Linux CPU/GPU 四种便携包；详细检查范围见发布准备文档。GPU 包的托管 CPU 冒烟和 NVRTC 检查不冒充显卡推理验收。
+- 增加显式的同版本便携包替换工作流，绑定成功构建及预期旧提交，核对四包原始 artifact、分卷摘要和远端上传结果。全部新分卷通过后才切换下载名和原标签；失败恢复旧资产名与元数据，操作记录保留在 Actions。原正常发布保护和容器镜像不变。
 
 ### English
 
 - Fix Numba's `cannot cache function / no locator available` when the archived mixer uses a relative source path and the system user cache is unavailable outside the source checkout. Import the mixer and cached librosa/resampy modules from bundled source files, preserving JIT, disk caching, Float64 precision and the reverb algorithm.
 - Require actual frozen-runtime checks in both the local spec and Actions: a separate Unicode directory, cold cache, Float32/Float64 reverb parity, real resampling, DOUBLE WAV mixing, both localized HTTP interfaces and second-process cache hits. Regressions reproduce the archived-path failure and verify source-backed execution; worker help checks remain.
 - Keep version 1.6.0 and rebuild the existing Windows/Linux CPU/GPU portable variants. Hosted CPU smoke tests and NVRTC compilation do not claim GPU inference acceptance.
+- Add an explicit same-version portable replacement workflow bound to a successful build and the expected previous commit. Verify all four artifacts, volume checksums and remote uploads before switching download names and the existing tag. Restore original names and metadata on switch failure and preserve an Actions receipt. Normal publication safeguards and existing container images remain unchanged.
 
 ## 1.6.0 — 2026-10-24
 
