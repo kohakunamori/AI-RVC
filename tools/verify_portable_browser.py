@@ -77,7 +77,7 @@ BROWSER_CODE = r'''async (page) => {
     const catalog = CATALOGS[code];
     await page.getByRole('button', {name: catalog.settings.save_language, exact: true}).waitFor({timeout: 60000});
     const snapshot = await page.locator('body').ariaSnapshot();
-    if (!snapshot.includes('combobox') || !snapshot.includes(catalog.settings.save_language))
+    if (!snapshot.includes('listbox') || !snapshot.includes(catalog.settings.save_language))
       throw new Error('Language controls are missing from the current rendered snapshot');
     for (const label of Object.values(catalog.tabs)) {
       if (!await page.getByRole('tab', {name: label, exact: true}).isVisible())
@@ -98,7 +98,7 @@ BROWSER_CODE = r'''async (page) => {
   await inspect('zh_CN');
   // Read each changed UI before interacting; option references are never hard-coded.
   await page.locator('body').ariaSnapshot();
-  await page.getByRole('combobox').first().click();
+  await page.getByRole('listbox', {name: CATALOGS.zh_CN.settings.language, exact: true}).click();
   const options = await page.locator('body').ariaSnapshot();
   if (!options.includes('English')) throw new Error('English is missing from the language choices');
   await page.getByRole('option', {name: 'English', exact: true}).click();
@@ -172,6 +172,9 @@ def verify(package: Path, output: Path) -> None:
             print('Original Windows CPU executable passed Chrome checks in zh_CN and en_US', flush=True)
         finally:
             try:
+                state = cli('run-code', 'async (page) => ({url: page.url(), snapshot: await page.locator("body").ariaSnapshot()})', '--raw', strict=False)
+                (output / 'last-page.json').write_text(state, encoding='utf-8')
+                cli('screenshot', '--filename=' + str(output / 'last-page.png'), strict=False)
                 cli('console', strict=False)
                 cli('requests', strict=False)
                 cli('close', strict=False)
