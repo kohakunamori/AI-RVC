@@ -11,6 +11,7 @@ WORKERS = {
     "uvr5": "infer/official_upstream_uvr_runner.py",
     "mcp-convert": "rvc_mcp/worker.py",
     "mcp-server": "rvc_mcp/server.py",
+    "package-smoke": "tools/packaged_smoke.py",
 }
 
 

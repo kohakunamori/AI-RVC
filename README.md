@@ -75,6 +75,8 @@ Leap 在这一个受控样本中高 **0.8280 dB**，三个连续分段也都领�
 
 本地回归：`python -m unittest discover -s tests`。真实处理路线检查：`python tests/run_mode_matrix.py --help`。浏览器播放、云端和实体设备需要另做实际验收，单元测试不能替代。
 
+便携包构建还必须通过 `python tools/verify_packaged_runtime.py <可执行文件>`：在独立中文临时目录中，使用新缓存运行包内 Float64 JIT 混响、重采样、DOUBLE WAV 混音和中英文 HTTP 界面，再启动第二个进程确认复用编译缓存。`lib.mixer`、librosa、resampy 按真实源码打包，避免归档中的相对路径使 Numba 报 `no locator available`。English: Portable builds also run the frozen verifier from a separate Unicode directory, checking native Float64 reverb, resampling, DOUBLE WAV mixing, both localized HTTP interfaces and cache reuse in a second process. Cached audio modules are imported from bundled source files so Numba can locate them after relocation.
+
 ## 功能范围
 
 本仓库提供完整的本地 RVC 翻唱推理流程，重点是现有 `.pth` / `.index` 角色模型的使用与管理。训练 RVC 模型、文本转语音、实时直播变声和零样本声音克隆不在当前 WebUI 的功能范围内。

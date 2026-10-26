@@ -360,6 +360,7 @@ jobs:
         fi
         "${EXE}" --internal-worker vc --help
         "${EXE}" --internal-worker uvr5 --help
+        python tools/verify_packaged_runtime.py "${EXE}"
 
     - name: Create portable package
       if: steps.selection.outputs.should_run == 'true'
