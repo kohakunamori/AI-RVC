@@ -77,6 +77,8 @@ Leap 在这一个受控样本中高 **0.8280 dB**，三个连续分段也都领�
 
 便携包构建还必须通过 `python tools/verify_packaged_runtime.py <可执行文件>`：在独立中文临时目录中，使用新缓存运行包内 Float64 JIT 混响、重采样、DOUBLE WAV 混音和中英文 HTTP 界面，再启动第二个进程确认复用编译缓存。`lib.mixer`、librosa、resampy 按真实源码打包，避免归档中的相对路径使 Numba 报 `no locator available`。English: Portable builds also run the frozen verifier from a separate Unicode directory, checking native Float64 reverb, resampling, DOUBLE WAV mixing, both localized HTTP interfaces and cache reuse in a second process. Cached audio modules are imported from bundled source files so Numba can locate them after relocation.
 
+`Verify portable browser` 从已成功的四包构建下载原始 Windows CPU 包，核对分卷与完整文件清单，再用 Chrome 验证中英文切换、刷新、动态表格和内嵌播放器，并检查服务端异常。翻唱模式、源结构约束和混音预设的回调使用固定内部值，显示文字随语言更新。English: `Verify portable browser` verifies original Windows CPU archives and their complete inventory before checking both locales, reloads, dynamic tables, the embedded player and server exceptions in Chrome. Route, source-constraint and mix-preset events use stable internal values with localized labels.
+
 播放器的脚本与样式已完整内联在 `player.html`；发行包仅收集实际界面资源，校验时拒绝夹带前端 `node_modules`。English: The player's scripts and styles are fully inlined in `player.html`; portable packages include runtime UI assets and reject frontend `node_modules`.
 
 ## 功能范围

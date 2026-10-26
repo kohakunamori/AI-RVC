@@ -76,10 +76,8 @@ LANGUAGE_CHANGE_JS = """async (choice) => {
     document.documentElement.lang = code === 'en_US' ? 'en' : 'zh-CN';
     __RVC_ACCESSIBILITY__
     window.rvcPlayerLanguage = code;
-    if (window.rvcPlayerPayload) {
-        const payload = {...window.rvcPlayerPayload, language:code};
-        window.rvcPlayerPayload = payload;
-        document.getElementById('rvc-multitrack-frame')?.contentWindow?.postMessage({type:'rvc-language',payload}, location.origin);
-    }
+    const payload = {...(window.rvcPlayerPayload || {files:[]}), language:code};
+    window.rvcPlayerPayload = payload;
+    document.getElementById('rvc-multitrack-frame')?.contentWindow?.postMessage({type:'rvc-language',payload}, location.origin);
     return [];
 }""".replace('__RVC_TITLES__', json.dumps({code: catalog().translations_dict[locale]['app_title'] for code, locale in LOCALES.items()}, ensure_ascii=False)).replace('__RVC_ACCESSIBILITY__', ACCESSIBILITY_JS)

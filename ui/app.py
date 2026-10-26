@@ -29,6 +29,7 @@ SUPPORTED_LANGUAGES = {
     "en_US": "English",
 }
 LANGUAGE_LABEL_TO_CODE = {label: code for code, label in SUPPORTED_LANGUAGES.items()}
+MIX_PRESET_KEYS = ("mix_preset_universal", "mix_preset_vocal", "mix_preset_accompaniment", "mix_preset_live")
 
 # 加载语言包
 def load_i18n(lang: str = "zh_CN") -> dict:
@@ -370,11 +371,17 @@ def get_cover_mix_presets() -> Tuple[Dict[str, Dict[str, int]], str]:
 def apply_cover_mix_preset(preset_name: str) -> Tuple[int, int, int]:
     """Return the actual mix slider values for a selected preset."""
     presets, _ = get_cover_mix_presets()
+    if preset_name in MIX_PRESET_KEYS:
+        preset_name = t(preset_name, "cover")
     if preset_name not in presets:
         raise ValueError(f"Unknown mix preset: {preset_name}")
     preset = presets[preset_name]
     return preset["vocals_volume"], preset["accompaniment_volume"], preset["reverb"]
 
+
+def get_cover_mix_preset_options() -> List[Tuple[str, str]]:
+    """Keep event values stable while translating the displayed preset names."""
+    return [(t(key, "cover"), key) for key in MIX_PRESET_KEYS]
 
 
 
@@ -1143,13 +1150,14 @@ def _cover_download_button_updates(
 def update_route_controls(mode: str, karaoke: bool, source_mode: Optional[str] = None, merge_backing: Optional[bool] = None):
     """只更新可用性和明确的路由值，不触发处理。"""
     pipeline_labels, _ = get_vc_pipeline_mode_option_maps()
-    _, source_labels = get_source_constraint_option_maps()
+    source_choices, _ = get_source_constraint_option_maps()
     official = _resolve_labeled_choice(pipeline_labels, mode, "vc_pipeline_mode") == "official"
     active_karaoke = bool(karaoke) and not official
     return (
         gr.update(value=False if official else karaoke, interactive=not official),
         gr.update(value=(True if merge_backing is None else merge_backing) if active_karaoke else False, interactive=active_karaoke),
-        gr.update(value=source_labels["off"] if official else source_mode or source_labels["auto"], interactive=not official),
+        gr.update(value="off" if official else _resolve_labeled_choice(
+            source_choices, source_mode or "auto", "source_constraint_mode"), interactive=not official),
     )
 
 
@@ -2620,8 +2628,8 @@ def create_ui() -> gr.Blocks:
                         gr.Markdown(ui_text("automatic_cover_settings_info", "cover"))
                         cover_cfg = config.get("cover", {})
                         auto_settings = resolve_automatic_cover_settings(config)
-                        source_label_to_value, source_value_to_label = get_source_constraint_option_maps()
-                        pipeline_label_to_value, pipeline_value_to_label = get_vc_pipeline_mode_option_maps()
+                        source_label_to_value, _ = get_source_constraint_option_maps()
+                        pipeline_label_to_value, _ = get_vc_pipeline_mode_option_maps()
 
                         cover_vc_route_status = gr.Textbox(
                             label=ui_text("vc_preprocess_status", "cover"),
@@ -2682,21 +2690,15 @@ def create_ui() -> gr.Blocks:
 
                             cover_source_constraint_mode = gr.Dropdown(
                                 label=ui_text("source_constraint_mode", "cover"),
-                                choices=list(source_label_to_value.keys()),
-                                value=source_value_to_label.get(
-                                    str(auto_settings["source_constraint_mode"]),
-                                    list(source_label_to_value.keys())[0],
-                                ),
+                                choices=list(source_label_to_value.items()),
+                                value=auto_settings["source_constraint_mode"],
                                 info=ui_text("source_constraint_mode_info", "cover"),
                             )
 
                             cover_vc_pipeline_mode = gr.Dropdown(
                                 label=ui_text("vc_pipeline_mode", "cover"),
-                                choices=list(pipeline_label_to_value.keys()),
-                                value=pipeline_value_to_label.get(
-                                    str(auto_settings["vc_pipeline_mode"]),
-                                    list(pipeline_label_to_value.keys())[0],
-                                ),
+                                choices=list(pipeline_label_to_value.items()),
+                                value=auto_settings["vc_pipeline_mode"],
                                 info=ui_text("vc_pipeline_mode_info", "cover"),
                             )
 
@@ -2705,8 +2707,8 @@ def create_ui() -> gr.Blocks:
 
                             cover_mix_preset = gr.Dropdown(
                                 label=ui_text("mix_preset", "cover"),
-                                choices=list(mix_presets.keys()),
-                                value=default_mix_preset,
+                                choices=get_cover_mix_preset_options(),
+                                value="mix_preset_universal",
                                 info=ui_text("mix_preset_info", "cover"),
                                 interactive=True
                             )
@@ -3222,20 +3224,15 @@ def create_ui() -> gr.Blocks:
 
 
         def change_language(choice, series, keyword, character, available_series, available_keyword, available_character,
-                            source_mode, pipeline_mode, mix_preset, karaoke, input_mode):
-            old = i18n
-            def translate_option(value, keys, section='cover'):
-                key = next((key for key in keys if old[section][key] == value), None)
-                return t(key, section) if key else value
+                            source_mode, pipeline_mode, mix_preset, karaoke, input_mode, *, persist=True):
             source_value = _resolve_labeled_choice(get_source_constraint_option_maps()[0], source_mode, 'source_constraint_mode')
             pipeline_value = _resolve_labeled_choice(get_vc_pipeline_mode_option_maps()[0], pipeline_mode, 'vc_pipeline_mode')
-            status = save_language_setting(choice)
+            preset_value = _resolve_labeled_choice(dict(get_cover_mix_preset_options()), mix_preset, 'mix_preset')
+            status = save_language_setting(choice) if persist else ""
             series = _normalize_series_choice(series)
             available_series = _normalize_series_choice(available_series)
-            source_choices, source_labels = get_source_constraint_option_maps()
-            pipeline_choices, pipeline_labels = get_vc_pipeline_mode_option_maps()
-            presets, _ = get_cover_mix_presets()
-            preset = translate_option(mix_preset, ['mix_preset_universal','mix_preset_vocal','mix_preset_accompaniment','mix_preset_live'])
+            source_choices, _ = get_source_constraint_option_maps()
+            pipeline_choices, _ = get_vc_pipeline_mode_option_maps()
             dynamic_updates = (gr.update(choices=[(t("input_mode_song", "cover"), "song"), (t("input_mode_vocals", "cover"), "vocals")], value=input_mode), status,
                 gr.update(choices=get_downloaded_character_series(), value=series),
                 gr.update(choices=get_downloaded_character_choices(series, keyword), value=character),
@@ -3243,14 +3240,16 @@ def create_ui() -> gr.Blocks:
                 gr.update(choices=[_all_series_label()] + get_available_character_series(), value=available_series),
                 gr.update(choices=get_available_character_choices(available_series, available_keyword), value=available_character),
                 get_available_character_details(available_character),
-                gr.update(choices=list(source_choices), value=source_labels[source_value]),
-                gr.update(choices=list(pipeline_choices), value=pipeline_labels[pipeline_value]),
-                gr.update(choices=list(presets), value=preset),
+                gr.update(choices=list(source_choices.items()), value=source_value),
+                gr.update(choices=list(pipeline_choices.items()), value=pipeline_value),
+                gr.update(choices=get_cover_mix_preset_options(), value=preset_value),
                 get_cover_vc_route_status(pipeline_value, karaoke_separation=karaoke, input_mode=input_mode),
                 check_mature_deecho_status(), get_device_info(),
                 gr.update(choices=_build_device_choices()),
                 gr.update(value=get_model_table(), headers=[t('model_name','ui'),t('model_path','ui'),t('index_path','ui')]))
             updates = dict(zip(translated_components, refresh_translations(choice)))
+            updates[language_dropdown] = {**updates.get(language_dropdown, {}),
+                                          **gr.update(value=SUPPORTED_LANGUAGES[resolve_language_choice(choice)])}
             for component, update in zip(dynamic_components, dynamic_updates):
                 update = update if isinstance(update, dict) else gr.update(value=update)
                 updates[component] = {**updates.get(component, {}), **update}
@@ -3261,16 +3260,23 @@ def create_ui() -> gr.Blocks:
                      download_series, download_char_dropdown, download_char_details,
                      cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset,
                      cover_vc_route_status, mature_deecho_status, device_info, device_radio, model_table]
-        language_outputs = list(dict.fromkeys([*dynamic_components, *translated_components]))
+        language_outputs = list(dict.fromkeys([language_dropdown, *dynamic_components, *translated_components]))
+        language_inputs = [downloaded_series, downloaded_keyword, character_dropdown,
+                           download_series, download_keyword, download_char_dropdown,
+                           cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset, cover_karaoke, cover_input_mode]
+
+        def restore_language(*values):
+            choice = get_current_language_label()
+            return change_language(choice, *values, persist=False)
+
         save_language_btn.click(
             fn=change_language,
-            inputs=[language_dropdown, downloaded_series, downloaded_keyword, character_dropdown,
-                    download_series, download_keyword, download_char_dropdown,
-                    cover_source_constraint_mode, cover_vc_pipeline_mode, cover_mix_preset, cover_karaoke, cover_input_mode],
+            inputs=[language_dropdown, *language_inputs],
             outputs=language_outputs,
+            concurrency_id="interface-language",
         ).success(fn=None, inputs=[language_dropdown], outputs=None, js=LANGUAGE_CHANGE_JS, queue=False)
-        app.load(fn=lambda: (get_current_language_label(), *refresh_translations(get_current_language_label())),
-                 outputs=[language_dropdown, *translated_components]).then(
+        app.load(fn=restore_language, inputs=language_inputs,
+                 outputs=language_outputs, concurrency_id="interface-language").then(
             fn=None, inputs=[language_dropdown], outputs=None, js=LANGUAGE_CHANGE_JS, queue=False)
 
     return app

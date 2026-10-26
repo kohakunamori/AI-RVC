@@ -192,7 +192,9 @@ jobs:
       env:
         PYTHONIOENCODING: utf-8
         AI_RVC_DEVICE: cpu
-      run: python -m unittest discover -s tests
+      run: |
+        python -m unittest discover -s tests
+        git diff --exit-code -- assets/weights/characters/_version_notes.json
 
     - name: Bundle FFmpeg runtime
       if: steps.selection.outputs.should_run == 'true'

@@ -34,7 +34,8 @@ class EffectiveWiringTests(unittest.TestCase):
         self.assertFalse(merge["interactive"])
         self.assertFalse(source["interactive"])
         label = get_source_constraint_option_maps()[1]["on"]
-        self.assertEqual(update_route_controls("current", True, label)[2]["value"], label)
+        self.assertEqual(update_route_controls("current", True, label)[2]["value"], "on")
+        self.assertEqual(source["value"], "off")
 
     def test_route_status_does_not_claim_karaoke_when_disabled(self):
         from ui.app import get_cover_vc_route_status

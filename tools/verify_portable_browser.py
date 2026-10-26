@@ -59,23 +59,33 @@ def unpack(archives: Path, output: Path) -> Path:
 
 BROWSER_CODE = r'''async (page) => {
   const URL = __URL__, OUTPUT = __OUTPUT__, CATALOGS = __CATALOGS__;
-  const errors = [], failedRequests = [], consoleErrors = [];
+  const errors = [], failedRequests = [], consoleErrors = [], closedEventStreams = [];
+  const eventStreams = new WeakSet();
   page.on('pageerror', error => errors.push(String(error)));
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('response', response => {
+    if (response.url().startsWith(URL + '/gradio_api/queue/data?') && response.status() === 200 &&
+        response.headers()['content-type']?.startsWith('text/event-stream')) eventStreams.add(response.request());
     if (response.url().startsWith(URL) && response.status() >= 400)
       failedRequests.push({url: response.url(), status: response.status()});
   });
   page.on('requestfailed', request => {
-    if (request.url().startsWith(URL)) failedRequests.push({url: request.url(), error: request.failure()});
+    if (!request.url().startsWith(URL)) return;
+    const failure = {url: request.url(), error: request.failure()};
+    // Chrome reports closing a successful SSE stream as ERR_ABORTED, including
+    // after queue completion and reload. Keep that evidence separate from faults.
+    if (eventStreams.has(request) && failure.error?.errorText === 'net::ERR_ABORTED')
+      closedEventStreams.push(failure);
+    else failedRequests.push(failure);
   });
   await page.goto(URL, {waitUntil: 'domcontentloaded', timeout: 60000});
   const observations = [];
-  async function inspect(code) {
+  async function inspect(code, phase = '') {
     const catalog = CATALOGS[code];
     await page.getByRole('button', {name: catalog.settings.save_language, exact: true}).waitFor({timeout: 60000});
+    await page.waitForFunction(text => Array.from(document.querySelectorAll('textarea')).some(el => el.value.includes(text)), catalog.models.status_scope);
     const snapshot = await page.locator('body').ariaSnapshot();
     if (!snapshot.includes('listbox') || !snapshot.includes(catalog.settings.save_language))
       throw new Error('Language controls are missing from the current rendered snapshot');
@@ -83,16 +93,20 @@ BROWSER_CODE = r'''async (page) => {
       if (!await page.getByRole('tab', {name: label, exact: true}).isVisible())
         throw new Error('Missing visible localized tab: ' + label);
     }
-    await page.screenshot({path: OUTPUT + '/' + code + '-models.png', fullPage: true});
+    for (const key of ['model_name', 'model_path', 'index_path']) {
+      if (!snapshot.includes('columnheader "' + catalog.ui[key] + '"'))
+        throw new Error('Model table did not restore the current language: ' + key);
+    }
+    await page.screenshot({path: OUTPUT + '/' + code + phase + '-models.png', fullPage: true});
     await page.getByRole('tab', {name: catalog.tabs.cover, exact: true}).click();
     const coverSnapshot = await page.locator('body').ariaSnapshot();
     if (!coverSnapshot.includes(catalog.tabs.cover)) throw new Error('Cover tab did not render');
     const frame = page.frameLocator('iframe#rvc-multitrack-frame');
-    await frame.locator('body').waitFor({state: 'visible', timeout: 30000});
+    await frame.getByText(catalog.multitrack.empty, {exact: true}).waitFor({timeout: 30000});
     const playerText = await frame.locator('body').innerText();
     if (!playerText.trim()) throw new Error('The bundled player rendered an empty document');
-    await page.screenshot({path: OUTPUT + '/' + code + '-cover.png', fullPage: true});
-    observations.push({language: code, snapshot, coverSnapshot, playerText});
+    await page.screenshot({path: OUTPUT + '/' + code + phase + '-cover.png', fullPage: true});
+    observations.push({language: code, phase, snapshot, coverSnapshot, playerText});
     await page.getByRole('tab', {name: catalog.tabs.models, exact: true}).click();
   }
   await inspect('zh_CN');
@@ -105,12 +119,18 @@ BROWSER_CODE = r'''async (page) => {
   await page.getByRole('button', {name: CATALOGS.zh_CN.settings.save_language, exact: true}).click();
   await inspect('en_US');
   await page.reload({waitUntil: 'domcontentloaded'});
-  await page.getByRole('button', {name: CATALOGS.en_US.settings.save_language, exact: true}).waitFor({timeout: 60000});
+  await inspect('en_US', '-reloaded');
+  await page.locator('body').ariaSnapshot();
+  await page.getByRole('listbox', {name: CATALOGS.en_US.settings.language, exact: true}).click();
+  await page.locator('body').ariaSnapshot();
+  await page.getByRole('option', {name: '中文', exact: true}).click();
+  await page.getByRole('button', {name: CATALOGS.en_US.settings.save_language, exact: true}).click();
+  await inspect('zh_CN', '-restored');
   if (errors.length || failedRequests.length || consoleErrors.length)
     throw new Error(JSON.stringify({errors, failedRequests, consoleErrors}));
   return {
     status: 'passed', observations, languagePersistsAfterReload: true,
-    pageErrors: errors, failedLocalRequests: failedRequests, consoleErrors
+    pageErrors: errors, failedLocalRequests: failedRequests, consoleErrors, closedEventStreams
   };
 }'''
 
@@ -138,7 +158,7 @@ def verify(package: Path, output: Path) -> None:
         with (output / 'browser-cli.log').open('a', encoding='utf-8') as log:
             log.write(result.stdout + result.stderr)
         if strict and (result.returncode or '### Error' in result.stdout):
-            raise RuntimeError('Browser CLI failed; see browser-cli.log')
+            raise RuntimeError('Browser CLI failed; see browser-cli.log: ' + result.stdout[-2000:])
         return result.stdout
 
     with (output / 'application.log').open('w', encoding='utf-8') as log:
@@ -168,8 +188,6 @@ def verify(package: Path, output: Path) -> None:
             report = json.loads(result)
             if report.get('status') != 'passed':
                 raise RuntimeError('The real browser did not return a completed verification report')
-            (output / 'browser-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-            print('Original Windows CPU executable passed Chrome checks in zh_CN and en_US', flush=True)
         finally:
             try:
                 state = cli('run-code', 'async (page) => ({url: page.url(), snapshot: await page.locator("body").ariaSnapshot()})', '--raw', strict=False)
@@ -181,6 +199,10 @@ def verify(package: Path, output: Path) -> None:
             finally:
                 app.terminate()
                 app.wait(timeout=30)
+    if 'Traceback (most recent call last)' in (output / 'application.log').read_text(encoding='utf-8'):
+        raise RuntimeError('The original app logged a server exception during browser verification')
+    (output / 'browser-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    print('Original Windows CPU executable passed Chrome checks in zh_CN and en_US', flush=True)
 
 
 def main() -> None:

@@ -1,14 +1,26 @@
 """A startup-pinned device must never appear to be changed by an ignored save."""
+from contextlib import ExitStack
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
 import gradio as gr
 
 from ui import app
+from tools import character_models
 
 
 class ManagedDeviceSettingsTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        context = ExitStack()
+        self.addCleanup(context.close)
+        directory = context.enter_context(tempfile.TemporaryDirectory())
+        context.enter_context(mock.patch.object(character_models, 'get_character_models_dir', return_value=Path(directory)))
+        context.enter_context(mock.patch.dict(character_models._VERSION_NOTE_CACHE, {}, clear=True))
+        context.enter_context(mock.patch.object(character_models, '_VERSION_NOTE_CACHE_LOADED', False))
+
     async def test_managed_device_is_readonly_and_api_cannot_persist_ignored_value(self):
         with mock.patch.dict(os.environ, {'AI_RVC_DEVICE': 'cpu'}), \
              mock.patch.dict(app.config, {'device': 'cpu'}), \

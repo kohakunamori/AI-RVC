@@ -7,14 +7,18 @@
 - 修复在其他电脑或源码目录之外启动时，`lib\\mixer.py` 的 Numba 内核因相对源码路径及不可用的用户缓存报 `cannot cache function / no locator available`。混音模块及同样使用缓存的 librosa、resampy 改为从包内真实源码加载；保留 JIT、磁盘缓存、Float64 精度及原混响算法。
 - 本地 spec 与 GitHub Actions 均增加实际冻结程序验收：独立中文目录、冷缓存、Float32/Float64 混响数值对照、真实重采样、DOUBLE WAV 混音、中英文 HTTP 启动，以及第二进程命中编译缓存。补充旧归档路径失败与新源码路径成功的回归；工作进程帮助命令继续保留。
 - 修正 Actions 把整个前端开发目录打进成品的问题：仅收集界面 Python 文件和内联播放器 HTML，与本地 spec 对齐。通过显式 `--packaged` 区分构建前源码检查与成品检查；成品拒绝缺少播放器或夹带 `node_modules`，避免附带无关的构建器及不适用的 musl 原生依赖。
+- 修复真实浏览器验收发现的语言切换与刷新错误：源结构约束、翻唱模式和混音预设使用固定内部值，显示名称仍完整翻译，避免已排队的旧语言选项导致回调失败。刷新同步恢复动态状态、模型表头与选项，语言加载/保存串行处理；空播放器也更新语言，已有音轨继续保留。新增跨语言事件回归，浏览器覆盖中文→英文→刷新→中文，并把服务端异常纳入失败条件。
 - 保持版本号 `1.6.0`，重建原 Windows/Linux CPU/GPU 四种便携包；详细检查范围见发布准备文档。GPU 包的托管 CPU 冒烟和 NVRTC 检查不冒充显卡推理验收。
 - 增加显式的同版本便携包替换工作流，绑定成功构建及预期旧提交，核对四包原始 artifact、分卷摘要和远端上传结果。全部新分卷通过后才切换下载名和原标签；失败恢复旧资产名与元数据，操作记录保留在 Actions。原正常发布保护和容器镜像不变。
 - 增加独立原包浏览器验收工作流：从成功构建下载 Windows CPU 原始分卷，校验压缩包与解压后完整清单，在独立中文目录启动原样 EXE，用 Chrome 检查两种语言、语言保存与内嵌播放器，保存截图及浏览器、应用日志；不重新构建或修改发行包。
+- 将界面测试的角色版本缓存隔离到临时目录，构建在完整回归后核对真实版本备注未被改写，避免测试角色元数据进入便携包。
 
 ### English
 
 - Fix Numba's `cannot cache function / no locator available` when the archived mixer uses a relative source path and the system user cache is unavailable outside the source checkout. Import the mixer and cached librosa/resampy modules from bundled source files, preserving JIT, disk caching, Float64 precision and the reverb algorithm.
+- Fix language switching and reload failures found in real-browser acceptance. Source constraints, conversion routes and mix presets use stable internal values with fully translated labels, so queued values remain valid after a locale change. Restore dynamic statuses, model headers and choices on reload, serialize language loading/saving and translate the empty player while retaining existing tracks. Add cross-locale event regressions and Chinese→English→reload→Chinese browser checks that also reject server exceptions.
 - Add a separate original-package browser workflow: download the Windows CPU volumes from a successful build, verify archive hashes and the full extracted inventory, launch the untouched executable from a separate Unicode directory, and check both locales, saved language and the embedded player in Chrome. Preserve screenshots and browser/application logs without rebuilding or modifying release archives.
+- Isolate UI test character-version caches in temporary directories and require the tracked version notes to remain unchanged after the full suite, preventing test character metadata from entering portable archives.
 - Require actual frozen-runtime checks in both the local spec and Actions: a separate Unicode directory, cold cache, Float32/Float64 reverb parity, real resampling, DOUBLE WAV mixing, both localized HTTP interfaces and second-process cache hits. Regressions reproduce the archived-path failure and verify source-backed execution; worker help checks remain.
 - Align Actions with the local spec by collecting only UI Python files and the self-contained player HTML. An explicit `--packaged` flag separates source preparation from runtime validation. Reject packages with a missing player or frontend `node_modules`, avoiding unrelated build tools and incompatible musl native dependencies in runtime archives.
 - Keep version 1.6.0 and rebuild the existing Windows/Linux CPU/GPU portable variants. Hosted CPU smoke tests and NVRTC compilation do not claim GPU inference acceptance.

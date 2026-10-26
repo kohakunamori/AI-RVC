@@ -38,6 +38,7 @@ class ParameterConnectionTests(unittest.TestCase):
         from ui import app
         with (
             patch.object(app, 'config', {'cover': {'speaker_id': 3, 'index_rate': .7}}),
+            patch.object(app, 'resolve_character_name', side_effect=lambda value: value),
             patch('tools.character_models.get_character_model_path', return_value={'model_path': 'model.pth', 'index_path': 'model.index'}),
             patch('torch.load', return_value={}),
             patch('infer.contracts.inspect_checkpoint', return_value=SimpleNamespace(speaker_count=5, uses_f0=True)),
@@ -51,6 +52,7 @@ class ParameterConnectionTests(unittest.TestCase):
         from ui import app
         with (
             patch.object(app, 'config', {'cover': {'speaker_id': 3}}),
+            patch.object(app, 'resolve_character_name', side_effect=lambda value: value),
             patch('tools.character_models.get_character_model_path', return_value={'model_path': 'model.pth'}),
             patch('torch.load', return_value={}),
             patch('infer.contracts.inspect_checkpoint', return_value=SimpleNamespace(speaker_count=1, uses_f0=True)),
