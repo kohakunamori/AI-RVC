@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +68,8 @@ print(json.dumps(check_audio(output)))
         self.assertIn('--add-data "ui/*.py${SEP}ui"', workflow)
         self.assertIn('--add-data "ui/multitrack/dist/player.html${SEP}ui/multitrack/dist"', workflow)
         self.assertNotIn('--add-data "ui${SEP}ui"', workflow)
+        self.assertIn('python tools/package_runtime.py .', workflow)
+        self.assertIn('python tools/package_runtime.py "dist/${NAME}/_internal" --packaged', workflow)
 
     def test_package_layout_requires_built_player_and_rejects_development_dependencies(self):
         from tools.package_runtime import validate_runtime_layout
@@ -82,6 +85,23 @@ print(json.dumps(check_audio(output)))
             (root / "ui/multitrack/node_modules").mkdir()
             with self.assertRaisesRegex(RuntimeError, "node_modules"):
                 validate_runtime_layout(root)
+
+    def test_source_preparation_accepts_build_dependencies_but_packaged_cli_rejects_them(self):
+        from tools import package_runtime
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            player = root / "ui/multitrack/dist/player.html"
+            player.parent.mkdir(parents=True)
+            player.write_text("<!doctype html><html>bundled player</html>", encoding="utf-8")
+            (root / "ui/multitrack/node_modules").mkdir()
+            with patch.object(package_runtime, "validate_upstream_sources", return_value=495) as sources:
+                with patch.object(sys, "argv", ["package_runtime.py", str(root)]):
+                    package_runtime.main()
+                sources.assert_called_once_with(root.resolve())
+                with patch.object(sys, "argv", ["package_runtime.py", str(root), "--packaged"]):
+                    with self.assertRaisesRegex(RuntimeError, "node_modules"):
+                        package_runtime.main()
 
 
 if __name__ == "__main__":

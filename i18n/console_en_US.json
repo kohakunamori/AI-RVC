@@ -1,4 +1,5 @@
 {
+  "额外校验成品界面资源": "Also validate the packaged UI resources",
   "便携包重新打包": "Portable rebuild",
   "不能将当前模型的原生权重降为": "Cannot narrow this model's native weights to",
   "两路输出均为静音": "Both output stems are silent",

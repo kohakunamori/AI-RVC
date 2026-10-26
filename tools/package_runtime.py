@@ -114,9 +114,11 @@ def validate_cuda_runtime(runtime_root: Path, cuda_version: str = "12.8") -> int
 def main() -> None:
     parser = argparse.ArgumentParser(description=localize_console_message("校验发行包内全部固定版本 VC/UVR5 源码"))
     parser.add_argument("project_root", type=Path)
+    parser.add_argument("--packaged", action="store_true", help=localize_console_message("额外校验成品界面资源"))
     parser.add_argument("--cuda", metavar="MAJOR.MINOR", help=localize_console_message("额外验证包内 CUDA NVRTC 编译库"))
     args = parser.parse_args()
-    validate_runtime_layout(args.project_root.resolve())
+    if args.packaged:
+        validate_runtime_layout(args.project_root.resolve())
     count = validate_upstream_sources(args.project_root.resolve())
     print(f"已核对 VC/UVR5 固定源码，共 {count} 个文件")
     if args.cuda:
