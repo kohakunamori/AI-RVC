@@ -1,4 +1,5 @@
 {
+  "便携包重新打包": "Portable rebuild",
   "不能将当前模型的原生权重降为": "Cannot narrow this model's native weights to",
   "两路输出均为静音": "Both output stems are silent",
   "合成入口发生变化": "Synthesis entry point has changed",

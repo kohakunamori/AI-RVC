@@ -42,6 +42,9 @@ class ReplacePortablePackagesTests(unittest.TestCase):
             return copy.deepcopy(item)
         if method == "PATCH":
             self.release.update(payload)
+        # Downloads continue while uploads are staged; counters are not asset identity.
+        for item in self.release["assets"]:
+            item["download_count"] = item.get("download_count", 0) + 1
         return copy.deepcopy(self.release)
 
     def upload(self, prefix, current, path, name, entry):
@@ -99,7 +102,8 @@ class ReplacePortablePackagesTests(unittest.TestCase):
             self.fail_tag_update = True
             with self.assertRaisesRegex(RuntimeError, "Injected tag"):
                 self.execute(root)
-            self.assertEqual(self.release["assets"][:8], original["assets"])
+            self.assertEqual([(a["id"], a["name"], a["digest"]) for a in self.release["assets"][:8]],
+                             [(a["id"], a["name"], a["digest"]) for a in original["assets"]])
             self.assertEqual(self.release["body"], original["body"])
             self.assertEqual(self.tag["sha"], self.previous)
             self.assertFalse(any(operation[1] == "DELETE" for operation in self.writes))
@@ -112,7 +116,8 @@ class ReplacePortablePackagesTests(unittest.TestCase):
             self.corrupt_pending = True
             with self.assertRaisesRegex(RuntimeError, "verification failed"):
                 self.execute(root)
-            self.assertEqual(self.release["assets"][:8], original)
+            self.assertEqual([(a["id"], a["name"], a["digest"]) for a in self.release["assets"][:8]],
+                             [(a["id"], a["name"], a["digest"]) for a in original])
             self.assertEqual(self.tag["sha"], self.previous)
             self.assertFalse(any(operation[1] == "DELETE" for operation in self.writes))
 

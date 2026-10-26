@@ -99,8 +99,12 @@ def replace(repository: str, run: dict, root: Path, previous_sha: str, receipt: 
         print(f"Verified pending asset: {path.name}", flush=True)
     fresh = api(f"{prefix}/releases/{current['id']}")
     old_ids = {item["id"] for item in old}
-    if ([item for item in fresh["assets"] if item["id"] in old_ids] != old
+    def identity(item):
+        return tuple(item.get(key) for key in ("id", "name", "digest", "size", "state"))
+
+    if ({identity(item) for item in fresh["assets"] if item["id"] in old_ids} != {identity(item) for item in old}
             or {item["id"] for item in fresh["assets"]} != old_ids | {item["id"] for item in pending}
+            or fresh["target_commitish"] != current["target_commitish"] or fresh["body"] != current["body"]
             or api(f"{prefix}/git/ref/tags/{tag}")["object"] != previous_tag):
         raise RuntimeError("Release assets or tag changed while uploading; downloads were not replaced")
     release_path = f"{prefix}/releases/{current['id']}"
@@ -113,7 +117,7 @@ def replace(repository: str, run: dict, root: Path, previous_sha: str, receipt: 
         fresh = api(release_path)
         verify_assets([item for item in fresh["assets"] if item["id"] not in old_ids], expected)
         api(tag_path, "PATCH", {"sha": source, "force": True})
-        build_note = f"\n\n便携包重构建 / Portable rebuild: [{source[:12]}]({run['html_url']}).\n"
+        build_note = f"\n\n便携包重新打包 / Portable rebuild: [{source[:12]}]({run['html_url']}).\n"
         api(release_path, "PATCH", {"target_commitish": source, "body": notes + build_note})
         if api(f"{prefix}/git/ref/tags/{tag}")["object"]["sha"] != source:
             raise RuntimeError("The existing version tag did not move to the verified build")
@@ -132,7 +136,10 @@ def replace(repository: str, run: dict, root: Path, previous_sha: str, receipt: 
         api(release_path, "PATCH", {"target_commitish": current["target_commitish"], "body": current["body"]})
         raise
     # Delete only superseded IDs after every replacement and the existing tag pass.
+    obsolete = {item["id"]: item for item in api(release_path)["assets"] if item["id"] in old_ids}
     for item in old:
+        if identity(obsolete[item["id"]]) != identity({**item, "name": item["name"] + suffix + ".previous"}):
+            raise RuntimeError("A superseded asset changed; refusing to delete it")
         api(f"{prefix}/releases/assets/{item['id']}", "DELETE")
     verify_assets(api(release_path)["assets"], expected)
     record["status"] = "replaced"
