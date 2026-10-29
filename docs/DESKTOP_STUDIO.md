@@ -1,6 +1,6 @@
 # AI-RVC Studio — 原生桌面 GUI 与实时变声
 
-本地默认入口是 **PySide6 原生窗口**。无 WebView、无浏览器、无监听 HTTP 端口。原有 Gradio 页面仅作为兼容模式保留，可显式 `python run.py --web` 启动。Hugging Face Space 服务入口不变。
+本地默认入口是 **PySide6-Essentials 原生窗口**。无 WebView、无浏览器、无监听 HTTP 端口。原有 Gradio 页面仅作为兼容模式保留，可显式 `python run.py --web` 启动。Hugging Face Space 服务入口不变。
 
 ## 安装
 
@@ -35,4 +35,4 @@ python run.py
 
 ### 依赖和开发方向
 
-桌面 UI 不重复安装一个浏览器内核；PySide6 的许可证、分发规范与动态 Qt 库条款应在打包时复核。当前版本运行于已安装 Python 的本地环境，后续可加入 PyInstaller/Nuitka 打包以及统一自动安装程序，不在本次变更中承诺已完成 Windows EXE 发布。
+桌面 UI 不重复安装一个浏览器内核；PySide6-Essentials 的许可证、分发规范与动态 Qt 库条款应在打包时复核。当前版本运行于已安装 Python 的本地环境，后续可加入 PyInstaller/Nuitka 打包以及统一自动安装程序，不在本次变更中承诺已完成 Windows EXE 发布。
