@@ -43,6 +43,7 @@ jobs:
       - name: Run mocked audio and entrypoint tests
         run: python -m unittest discover -s tests -p test_desktop_realtime.py -v
       - name: Smoke-test real Qt window without X11, GPU or microphone
+        shell: bash
         run: |
           python - <<'PY'
           from PySide6.QtWidgets import QApplication
