@@ -1162,6 +1162,49 @@ def update_route_controls(mode: str, karaoke: bool, source_mode: Optional[str] =
     )
 
 
+def get_svc_shared_ui():
+    from tools.svc_model_registry import load_registry, shared_cache_dir
+    data = load_registry()
+    shared = data.get("_shared", {})
+    return shared.get("engine_python", ""), shared.get("cache_directory", ""), str(shared_cache_dir(data))
+
+
+def save_svc_shared_ui(python_path: str, cache_directory: str):
+    from tools.svc_model_registry import save_shared_config, status_markdown
+    try:
+        if python_path.strip() and not Path(python_path).expanduser().is_file():
+            raise ValueError("共享 Python 解释器路径不存在")
+        data = save_shared_config({
+            "engine_python": python_path,
+            "cache_directory": cache_directory,
+        })
+        return ("✅ 已保存共享环境。以下目录将用于统一模型缓存："
+                + str(data.get("_shared", {}).get("cache_directory") or ROOT_DIR / "assets" / "model_cache")
+                + "\n\n" + status_markdown())
+    except Exception as exc:
+        return f"❌ 无法保存共享配置：{exc}"
+
+
+def probe_svc_shared_python_ui():
+    """Check dependency conflicts without loading Torch or consuming VRAM."""
+    from tools.svc_model_registry import load_registry
+    import subprocess
+    python_path = load_registry().get("_shared", {}).get("engine_python", "")
+    if not python_path:
+        return "⚠️ 请先设置并保存共享 Python 环境。"
+    try:
+        result = subprocess.run(
+            [python_path, "-m", "pip", "check"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=30, check=False,
+        )
+        summary = result.stdout[-3000:] if result.stdout else "无输出"
+        return ("✅ 共享环境依赖检查通过：" if result.returncode == 0
+                else "⚠️ 共享环境存在依赖问题：") + "\n" + summary
+    except Exception as exc:
+        return f"❌ 无法检查共享环境：{exc}"
+
+
 def get_svc_config_ui(engine: str):
     from tools.svc_model_registry import load_registry, status_markdown
     info = load_registry().get(engine, {})
@@ -1181,7 +1224,7 @@ def save_svc_config_ui(engine: str, repository: str, python: str, checkpoint: st
             "engine_repository": repository, "engine_python": python,
             "checkpoint": checkpoint, "model_config": yaml_path,
         })
-        return "✅ 模型位置已保存。仅验证文件路径，尚需实际 GPU 推理验收。\\n\\n" + status_markdown()
+        return "✅ 模型位置已保存。仅验证文件路径，尚需实际 GPU 推理验收。\n\n" + status_markdown()
     except Exception as exc:
         return f"❌ 模型配置未保存: {exc}"
 
@@ -3271,10 +3314,40 @@ def create_ui() -> gr.Blocks:
                 gr.Markdown("## 本地歌声转换引擎管理")
                 gr.Markdown(
                     "RVC 角色模型仍在原角色管理界面。Seed-VC / YingMusic-SVC "
-                    "分别使用独立的本地 Python 环境。这里只保存路径，"
-                    "不会下载模型或上传歌曲到外部服务。"
+                    "优先共享兼容的 Python 环境和模型缓存。需要不兼容版本时可按引擎单独指定 Python。"
+                    "这里只保存路径，不会下载模型或上传歌曲到外部服务。"
+                )
+                gr.Markdown("### ♻️ 共享运行环境和模型缓存")
+                svc_shared_python = gr.Textbox(
+                    label="共享 Python / Common Python interpreter",
+                    info="兼容的 SVC 引擎可以复用同一 Python 环境；不强制安装互相冲突的版本。",
+                )
+                svc_shared_cache = gr.Textbox(
+                    label="共享缓存目录 / Model cache folder",
+                    info="留空使用项目 assets/model_cache；HF_HOME、TORCH_HOME 统一设置。",
+                )
+                svc_shared_path = gr.Textbox(
+                    label="实际缓存路径 / Resolved cache folder", interactive=False,
+                )
+                svc_shared_save_btn = gr.Button("💾 保存共享环境", variant="secondary")
+                svc_shared_probe_btn = gr.Button("🔍 检查共享 Python 依赖 (pip check)")
+                svc_shared_probe_status = gr.Textbox(
+                    label="依赖冲突报告 / Dependency report", interactive=False,
+                )
+                app.load(
+                    fn=get_svc_shared_ui,
+                    outputs=[svc_shared_python, svc_shared_cache, svc_shared_path],
                 )
                 svc_models_status = gr.Markdown(value=status_markdown())
+                svc_shared_save_btn.click(
+                    fn=save_svc_shared_ui,
+                    inputs=[svc_shared_python, svc_shared_cache],
+                    outputs=[svc_models_status],
+                )
+                svc_shared_probe_btn.click(
+                    fn=probe_svc_shared_python_ui,
+                    outputs=[svc_shared_probe_status],
+                )
                 svc_refresh_btn = gr.Button("🔄 检测本地模型状态")
                 svc_refresh_btn.click(fn=status_markdown, outputs=[svc_models_status])
                 svc_manage_engine = gr.Dropdown(
@@ -3284,7 +3357,7 @@ def create_ui() -> gr.Blocks:
                     value="seed_vc",
                 )
                 svc_repository = gr.Textbox(label="引擎仓库目录 / Engine repository")
-                svc_python = gr.Textbox(label="独立 Python 路径 / Python executable")
+                svc_python = gr.Textbox(label="专用 Python（可留空复用共享环境） / Override Python executable")
                 svc_checkpoint = gr.Textbox(
                     label="权重 checkpoint（Seed-VC 可以留空，首次运行由官方代码下载）")
                 svc_config_file = gr.Textbox(label="模型 YAML（与 checkpoint 同时填写）")

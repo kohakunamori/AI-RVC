@@ -30,7 +30,7 @@ def main() -> None:
         raise RuntimeError("YingMusic-SVC worker currently requires CUDA; CPU inference is unverified")
     if argv.cuda_index < 0 or argv.cuda_index >= torch.cuda.device_count():
         raise ValueError("Requested CUDA device unavailable")
-    # This worker file lives in AI-RVC; upstream my_inference.py is in the\n    # separately installed engine repository (our subprocess working directory).\n    sys.path.insert(0, str(Path.cwd().resolve()))\n    from my_inference import load_models_api, run_inference
+    # This worker lives in AI-RVC, while upstream my_inference.py is in\n    # the separately installed engine repository (our subprocess cwd).\n    sys.path.insert(0, str(Path.cwd().resolve()))\n    from my_inference import load_models_api, run_inference
 
     device = torch.device(f"cuda:{argv.cuda_index}")
     settings = argparse.Namespace(

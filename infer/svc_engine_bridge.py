@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import gc
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,14 @@ def convert_vocals(job: SVCJob) -> Path:
     """
     source, target, output, root, python, checkpoint, config = _validate(job)
     output.parent.mkdir(parents=True, exist_ok=True)
+    from tools.svc_model_registry import shared_cache_dir
+    cache = shared_cache_dir()
+    # Explicit, common weight locations; don't create three independent
+    # Hugging Face / Torch caches just because the engines use separate venvs.
+    cache_hf = cache / "huggingface"
+    cache_torch = cache / "torch"
+    cache_hf.mkdir(parents=True, exist_ok=True)
+    cache_torch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="svc_job_", dir=output.parent) as tmp:
         scratch = Path(tmp)
         args = [str(python)]
@@ -123,16 +132,26 @@ def convert_vocals(job: SVCJob) -> Path:
             ]
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
-        try:
-            result = subprocess.run(
-                args, cwd=str(root), env=env, capture_output=True, text=True,
-                check=False, timeout=job.timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"{job.engine} exceeded the {job.timeout_seconds}s inference limit") from exc
-        if result.returncode != 0:
-            output_log = (result.stderr + "\n" + result.stdout)[-4000:]
-            raise RuntimeError(f"{job.engine} exited {result.returncode}:\n{output_log}")
+        env["HF_HOME"] = str(cache_hf)
+        env["HF_HUB_CACHE"] = str(cache_hf / "hub")
+        env["TORCH_HOME"] = str(cache_torch)
+        env["AI_RVC_SVC_CACHE_DIR"] = str(cache)
+        # Never capture huge CLI debug logs into memory for multi-minute songs.
+        with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as log_file:
+            try:
+                result = subprocess.run(
+                    args, cwd=str(root), env=env,
+                    stdout=log_file, stderr=subprocess.STDOUT,
+                    check=False, timeout=job.timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"{job.engine} exceeded the {job.timeout_seconds}s inference limit") from exc
+            if result.returncode != 0:
+                log_file.seek(0, os.SEEK_END)
+                size = log_file.tell()
+                log_file.seek(max(0, size - 5000))
+                output_log = log_file.read()[-4000:]
+                raise RuntimeError(f"{job.engine} exited {result.returncode}:\n{output_log}")
         # SoulX preprocessing also emits temporary vocal WAVs; the output
         # contract is only the generated stem, not those intermediates.
         rendered = ([scratch / "generated" / "generated.wav"]
@@ -140,9 +159,19 @@ def convert_vocals(job: SVCJob) -> Path:
         rendered = [p for p in rendered if p.is_file()]
         if len(rendered) != 1:
             raise RuntimeError(f"{job.engine} must create exactly one converted vocal WAV, found {len(rendered)}")
-        converted, rate = sf.read(str(rendered[0]), dtype="float32", always_2d=True)
-        if not rate or converted.size == 0 or not np.isfinite(converted).all():
-            raise ValueError(f"{job.engine} produced empty or non-finite audio")
-        # Engines synthesize mono vocals: preserve channels but keep float precision.
-        sf.write(str(output), converted, rate, subtype="FLOAT")
+        # Stream even hours-long audio in bounded-size blocks; don't hold a
+        # second full song in RAM merely to convert PCM16 -> Float32.
+        temporary_output = scratch / "validated_float32.wav"
+        with sf.SoundFile(str(rendered[0]), mode="r") as inp:
+            if inp.frames <= 0 or inp.samplerate <= 0:
+                raise ValueError(f"{job.engine} produced empty audio")
+            with sf.SoundFile(
+                str(temporary_output), mode="w", samplerate=inp.samplerate,
+                channels=inp.channels, format="WAV", subtype="FLOAT",
+            ) as dst:
+                for block in inp.blocks(blocksize=65536, dtype="float32", always_2d=True):
+                    if not np.isfinite(block).all():
+                        raise ValueError(f"{job.engine} produced non-finite audio")
+                    dst.write(block)
+        os.replace(temporary_output, output)
     return output

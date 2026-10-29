@@ -39,27 +39,42 @@ def main():
 
     out = Path(args.output).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    prepared = []
-    for role, filepath in (("prompt", args.target), ("target", args.source)):
-        folder = out / f"preprocess_{role}"
+    from svc_reference_cache import prepare_soulx_reference
+
+    def preprocess(filepath: str, folder: Path):
         folder.mkdir(parents=True, exist_ok=True)
         pipeline = PreprocessPipeline(
             device=device, language="Mandarin",
             save_dir=str(folder), vocal_sep=False,
             max_merge_duration=60000, midi_transcribe=False,
         )
-        pipeline.run(
-            audio_path=str(Path(filepath).resolve()), vocal_sep=False,
-            max_merge_duration=60000, language="Mandarin",
-        )
-        vocal = folder / "vocal.wav"
-        f0 = folder / "vocal_f0.npy"
-        if not vocal.is_file() or not f0.is_file():
-            raise FileNotFoundError(f"SoulX F0 preprocessing failed for {role}")
-        prepared.append((vocal, f0))
-        del pipeline
-        gc.collect()
-        torch.cuda.empty_cache()
+        try:
+            pipeline.run(
+                audio_path=str(Path(filepath).resolve()), vocal_sep=False,
+                max_merge_duration=60000, language="Mandarin",
+            )
+            vocal = folder / "vocal.wav"
+            f0 = folder / "vocal_f0.npy"
+            if not vocal.is_file() or not f0.is_file():
+                raise FileNotFoundError(f"SoulX preprocessing failed: {filepath}")
+            return vocal, f0
+        finally:
+            del pipeline
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    out = Path(args.output).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    prompt_wav, prompt_f0 = prepare_soulx_reference(
+        reference_file=Path(args.target).resolve(),
+        model_config=Path(args.config).resolve(),
+        implementation_file=Path.cwd().resolve() / "preprocess" / "pipeline.py",
+        fallback_directory=out / "preprocess_prompt",
+        run_preprocess=lambda folder: preprocess(args.target, folder),
+    )
+    target_wav, target_f0 = preprocess(args.source, out / "preprocess_target")
+    prepared = [(prompt_wav, prompt_f0), (target_wav, target_f0)]
 
     model_config = load_config(str(Path(args.config).resolve()))
     model = build_model(
