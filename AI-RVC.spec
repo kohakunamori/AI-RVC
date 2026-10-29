@@ -21,11 +21,18 @@ separator_datas = [
 ]
 
 bundle_datas, bundle_binaries, bundle_imports = [], [], []
-for package in ('torch', 'torchaudio', 'sounddevice', '_sounddevice_data', 'torchfcpe', 'transformers', 'rvc_mcp', 'mcp'):
+for package in ('torch', 'torchaudio', 'torchfcpe', 'transformers', 'rvc_mcp', 'mcp'):
     package_datas, package_binaries, package_imports = collect_all(package)
     bundle_datas.extend(package_datas)
     bundle_binaries.extend(package_binaries)
     bundle_imports.extend(package_imports)
+
+if sys.platform == 'win32':
+    # PyPI distributes bundled PortAudio DLLs on Windows only.
+    sounddev_data, sounddev_bins, sounddev_imports = collect_all('_sounddevice_data')
+    bundle_datas.extend(sounddev_data)
+    bundle_binaries.extend(sounddev_bins)
+    bundle_imports.extend(sounddev_imports)
 
 if sys.platform.startswith('linux') and torch.version.cuda:
     bundle_imports.append('nvidia')
