@@ -1,0 +1,5 @@
+# Optional local quality-candidate dependencies (not included in the stable release bundle).
+# SwiftF0 0.3.0 (2026-09-25), MIT license, bundles a small ONNX weight.
+# The stable default remains RMVPE because both are statistically tied in the
+# public pitch benchmark; comparison on singing audio is still required.
+swift-f0==0.3.0

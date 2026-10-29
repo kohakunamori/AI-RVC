@@ -1057,6 +1057,7 @@ def process_cover(
             karaoke_merge_backing_into_accompaniment=karaoke_merge_backing_into_accompaniment,
             source_constraint_mode=source_constraint_mode,
             vc_pipeline_mode=vc_pipeline_mode,
+            dereverb_mode=cover_cfg.get("dereverb_mode", "force"),
             output_dir=str(output_dir),
             model_display_name=get_character_filename_display(char_meta, resolved_name),
             output_name_suffixes={

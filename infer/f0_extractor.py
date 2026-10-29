@@ -13,7 +13,7 @@ import torch
 from infer.quality_policy import build_conservative_crepe_fill_mask
 
 
-F0Method = Literal["rmvpe", "pm", "harvest", "crepe", "fcpe", "hybrid"]
+F0Method = Literal["rmvpe", "pm", "harvest", "crepe", "fcpe", "hybrid", "swiftf0"]
 
 
 class F0Extractor:
@@ -92,6 +92,51 @@ class CrepeExtractor(F0Extractor):
             return_periodicity=True,
         )
         return f0.squeeze(0).cpu().numpy()
+
+
+class SwiftF0Extractor(F0Extractor):
+    """Locally runnable SwiftF0 0.3.x, resampled to the 10-ms RVC F0 grid.
+
+    SwiftF0 emits a 16-ms grid. Only interpolate between adjacent voiced
+    frames, never across unvoiced boundaries; keep zero as RVC's UV value.
+    """
+
+    def __init__(self, sample_rate: int = 16000, hop_length: int = 160):
+        super().__init__(sample_rate, hop_length)
+        try:
+            from swift_f0 import SwiftF0
+        except ImportError as exc:
+            raise RuntimeError(
+                "SwiftF0 is optional: install requirements_sota.txt before using f0_method=swiftf0"
+            ) from exc
+        self.model = SwiftF0()
+
+    def extract(self, audio: np.ndarray) -> np.ndarray:
+        signal = np.asarray(audio, dtype=np.float32).reshape(-1)
+        target_size = max(1, len(signal) // self.hop_length + 1)
+        if signal.size == 0:
+            return np.zeros(target_size, dtype=np.float32)
+        result = self.model.detect(signal, self.sample_rate, fmin=self.f0_min, fmax=self.f0_max)
+        times = np.asarray(result.timestamps, dtype=np.float64).reshape(-1)
+        pitch = np.asarray(result.pitch_hz, dtype=np.float32).reshape(-1)
+        confidence = np.asarray(result.confidence, dtype=np.float32).reshape(-1)
+        if not (len(times) == len(pitch) == len(confidence)):
+            raise ValueError("SwiftF0 returned inconsistent pitch/timestamp arrays")
+        if len(times) == 0:
+            return np.zeros(target_size, dtype=np.float32)
+        if not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
+            raise ValueError("SwiftF0 returned invalid timestamps")
+        positions = np.arange(target_size, dtype=np.float64) * self.hop_length / self.sample_rate
+        right = np.searchsorted(times, positions, side="left").clip(0, len(times) - 1)
+        left = np.maximum(right - 1, 0)
+        at_or_before_first = positions <= times[0]
+        left[at_or_before_first] = 0
+        # No extrapolation after the last model frame.
+        valid = (positions <= times[-1]) & (confidence[left] >= 0.5) & (confidence[right] >= 0.5)
+        valid &= (pitch[left] > 0) & (pitch[right] > 0)
+        valid &= np.isfinite(pitch[left]) & np.isfinite(pitch[right])
+        interpolated = np.interp(positions, times, np.nan_to_num(pitch, nan=0.0, posinf=0.0, neginf=0.0))
+        return np.where(valid, interpolated, 0.0).astype(np.float32)
 
 
 class RMVPEExtractor(F0Extractor):
@@ -177,6 +222,8 @@ def get_f0_extractor(
         return CrepeExtractor(device=device)
     if method == "fcpe":
         return FCPEExtractor(device=device)
+    if method == "swiftf0":
+        return SwiftF0Extractor()
     raise ValueError(f"Unknown F0 method: {method}")
 
 
