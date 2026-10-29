@@ -3278,7 +3278,8 @@ def create_ui() -> gr.Blocks:
                 svc_refresh_btn.click(fn=status_markdown, outputs=[svc_models_status])
                 svc_manage_engine = gr.Dropdown(
                     label="配置引擎 / Engine",
-                    choices=[("Seed-VC Singing", "seed_vc"), ("YingMusic-SVC", "yingmusic_svc")],
+                    choices=[("Seed-VC Singing", "seed_vc"), ("YingMusic-SVC", "yingmusic_svc"),
+                             ("SoulX-Singer-SVC", "soulx_singer")],
                     value="seed_vc",
                 )
                 svc_repository = gr.Textbox(label="引擎仓库目录 / Engine repository")
@@ -3304,7 +3305,7 @@ def create_ui() -> gr.Blocks:
                     outputs=[svc_models_status],
                 )
                 gr.Markdown(
-                    "未接入的 HQ-SVC、SoulX-Singer-SVC 会显示为计划中，"
+                    "未接入的 HQ-SVC 会显示为计划中，"
                     "不能从一键翻唱选择。路径检查成功不等于 GPU 推理已通过。"
                 )
 
