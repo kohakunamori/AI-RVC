@@ -2,9 +2,12 @@
 """Double-click on Windows to open the native AI-RVC Studio without a console."""
 import multiprocessing
 import sys
+import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
