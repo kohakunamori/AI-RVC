@@ -304,10 +304,16 @@ jobs:
         SEP="${{ matrix.sep }}"
         NAME="AI-RVC-${{ matrix.platform }}-${{ matrix.variant }}"
         CUDA_IMPORTS=()
+        WINDOWED_FLAGS=()
         if [ "${{ matrix.platform }}" = "Linux" ] && [ "${{ matrix.variant }}" = "GPU" ]; then
           CUDA_IMPORTS+=(--hidden-import nvidia)
         fi
+        if [ "${{ matrix.platform }}" = "Windows" ]; then
+          # Native desktop executable, without an auxiliary console window.
+          WINDOWED_FLAGS+=(--windowed)
+        fi
         pyinstaller --name "${NAME}" \
+          "${WINDOWED_FLAGS[@]}" \
           --onedir \
           --additional-hooks-dir tools/pyinstaller_hooks \
           --add-data "ui/*.py${SEP}ui" \
