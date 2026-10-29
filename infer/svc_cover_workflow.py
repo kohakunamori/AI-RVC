@@ -75,6 +75,7 @@ def run_svc_cover(
         finally:
             if hasattr(separator, "unload_model"):
                 separator.unload_model()
+        result["vocals"] = lead
         result["lead_vocals"] = lead
         result["accompaniment"] = accompaniment
         if not karaoke:
