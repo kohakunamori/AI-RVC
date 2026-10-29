@@ -38,4 +38,6 @@ jobs:
       - name: Compile standalone modules
         run: python -m py_compile infer/svc_engine_bridge.py infer/svc_cover_workflow.py tools/svc_model_registry.py tools/run_svc_engine.py tools/yingmusic_svc_worker.py ui/app.py tests/test_svc_engine_bridge.py tests/test_svc_studio_integration.py
       - name: Run bridge tests
-        run: |\n          python -m unittest discover -s tests -p test_svc_engine_bridge.py -v\n          python -m unittest discover -s tests -p test_svc_studio_integration.py -v
+        run: |
+          python -m unittest discover -s tests -p test_svc_engine_bridge.py -v
+          python -m unittest discover -s tests -p test_svc_studio_integration.py -v
