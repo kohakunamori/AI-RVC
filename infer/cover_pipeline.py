@@ -4385,6 +4385,7 @@ class CoverPipeline:
         karaoke_merge_backing_into_accompaniment: bool = True,
         source_constraint_mode: str = "auto",
         vc_pipeline_mode: str = "current",
+        dereverb_mode: str = "force",
         output_dir: Optional[str] = None,
         model_display_name: Optional[str] = None,
         output_name_suffixes: Optional[Dict[str, str]] = None,
@@ -4435,6 +4436,7 @@ class CoverPipeline:
             "input_mode": input_mode,
             "separator": separator, "f0_method": f0_method, "use_official": use_official,
             "vc_pipeline_mode": vc_pipeline_mode, "source_constraint_mode": source_constraint_mode,
+            "dereverb_mode": dereverb_mode,
             "index_rate": index_ratio, "rms_mix_rate": rms_mix_rate, "protect": protect,
             "speaker_id": speaker_id, "uvr5_format": uvr5_format, "uvr5_agg": uvr5_agg,
             "demucs_shifts": demucs_shifts, "demucs_overlap": demucs_overlap, "demucs_split": demucs_split,
@@ -4711,13 +4713,16 @@ class CoverPipeline:
 
             vc_input_path = vocals_path
             vc_preprocessed = False
-            prepared_path = self._prepare_vocals_for_vc(
-                vocals_path,
-                session_dir,
-                preprocess_mode=effective_preprocess_mode,
-            )
-            vc_input_path = prepared_path
-            vc_preprocessed = True
+            if dereverb_mode == "off":
+                log.detail("VC preprocess: optional dereverb disabled; using original lead stem")
+            else:
+                prepared_path = self._prepare_vocals_for_vc(
+                    vocals_path,
+                    session_dir,
+                    preprocess_mode=effective_preprocess_mode,
+                )
+                vc_input_path = prepared_path
+                vc_preprocessed = True
             log.audio(f"VC预处理输入: {Path(vc_input_path).name}")
 
             report_progress("正在转换人声...", step_convert)

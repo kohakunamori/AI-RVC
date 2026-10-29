@@ -32,6 +32,7 @@
         "default_reverb": 0,
         "backing_mix": 0,
         "source_constraint_mode": "auto",
+        "dereverb_mode": "force",
         "vc_pipeline_mode": "current"
     }
 }
