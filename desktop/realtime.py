@@ -183,10 +183,7 @@ class RealtimeRVC:
             return
         if status:
             self.overruns += 1
-        try:
-            self._incoming.put_nowait(np.asarray(indata[:, 0], dtype=np.float32).copy())
-        except queue.Full:
-            self.overruns += 1  # Drop stale input rather than accumulating latency.
+        incoming_block = np.asarray(indata[:, 0], dtype=np.float32).copy()\n        try:\n            self._incoming.put_nowait(incoming_block)\n        except queue.Full:\n            self.overruns += 1\n            # Prefer fresh microphone audio: evict the oldest unprocessed block.\n            try:\n                self._incoming.get_nowait()\n                self._incoming.put_nowait(incoming_block)\n            except queue.Empty:\n                pass
         try:
             block = self._outgoing.get_nowait()
             if block.shape[0] == frames:
@@ -196,10 +193,7 @@ class RealtimeRVC:
         except queue.Empty:
             self.underruns += 1
 
-    def _run(self) -> None:
-        import sounddevice as sd
-        import torch
-        model = None
+    def _run(self) -> None:\n        import sounddevice as sd\n        import torch\n        model = None
         stream = None
         try:
             from types import SimpleNamespace
