@@ -1,0 +1,26 @@
+{
+  "seed_vc": {
+    "engine_repository": "",
+    "engine_python": "",
+    "checkpoint": "",
+    "model_config": ""
+  },
+  "yingmusic_svc": {
+    "engine_repository": "",
+    "engine_python": "",
+    "checkpoint": "",
+    "model_config": ""
+  },
+  "hq_svc": {
+    "engine_repository": "",
+    "engine_python": "",
+    "checkpoint": "",
+    "model_config": ""
+  },
+  "soulx_singer": {
+    "engine_repository": "",
+    "engine_python": "",
+    "checkpoint": "",
+    "model_config": ""
+  }
+}
