@@ -1,5 +1,7 @@
 # AI-RVC 一键 AI 翻唱 / RVC Voice Conversion WebUI
 
+> **Free/local model audit (2026-10-29):** [Verified availability, optional SwiftF0 inference, and the opt-in DeReverb bypass](docs/LOCAL_SOTA_MODEL_AUDIT_2026-10.md). The highest-scoring MVSep models are **not** silently substituted when freely downloadable weights are unavailable; the stable RVC v1/v2 defaults remain pinned until A/B testing.
+
 AI-RVC 是一个开源的 [RVC v1/v2](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) 翻唱 WebUI。项目包含人声与伴奏分离、主唱与和声分离、F0 提取、RVC 音色转换、FAISS 检索和混音导出，可直接处理 MP3、WAV 和 FLAC 歌曲。
 
 > 在线体验：[TelkNet AI 翻唱](https://telknet.cc/tools/ai-rvc)
