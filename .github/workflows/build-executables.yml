@@ -162,6 +162,9 @@ jobs:
         python -m pip install pyinstaller==6.22.2 pyinstaller-hooks-contrib==2026.7
         python -m pip install ${{ matrix.torch_stack }} --index-url ${{ matrix.pytorch_url }}
         python -m pip install -r requirements.txt
+        # Native Qt Widgets / PortAudio; no Qt WebEngine.
+        python -m pip install "PySide6-Essentials>=6.8,<7" "sounddevice>=0.5,<1"
+        python -c "import PySide6.QtWidgets, sounddevice; print('Native desktop runtime OK')"
         python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
 
     - name: Install audio-separator
@@ -262,7 +265,7 @@ jobs:
       env:
         PYTHONIOENCODING: utf-8
       run: |
-        echo "=== Download all models, separator defaults, and official RVC source ==="
+        echo "=== Bundle HuBERT, RMVPE, separators, FFmpeg and upstream RVC code ==="
         python tools/download_models.py --all
         python tools/package_runtime.py .
 
@@ -308,6 +311,7 @@ jobs:
           --onedir \
           --additional-hooks-dir tools/pyinstaller_hooks \
           --add-data "ui/*.py${SEP}ui" \
+          --add-data "desktop/*.py${SEP}desktop" \
           --add-data "ui/multitrack/dist/player.html${SEP}ui/multitrack/dist" \
           --add-data "infer${SEP}infer" \
           --add-data "lib${SEP}lib" \
@@ -325,7 +329,11 @@ jobs:
           --add-data "assets/separator_models${SEP}assets/separator_models" \
           --hidden-import=torch \
           --hidden-import=torchaudio \
-          --hidden-import=gradio \
+          --hidden-import=desktop.gui \
+          --hidden-import=desktop.realtime \
+          --hidden-import=PySide6.QtWidgets \
+          --hidden-import=PySide6.QtCore \
+          --hidden-import=sounddevice \
           --hidden-import=librosa \
           --hidden-import=soundfile \
           --hidden-import=fairseq \
@@ -346,12 +354,11 @@ jobs:
           --hidden-import=pedalboard \
           --collect-all torch \
           --collect-all torchaudio \
-          --collect-all gradio \
-          --collect-all gradio_client \
           --collect-all torchfcpe \
           --collect-all transformers \
           --collect-all rvc_mcp \
           --collect-all mcp \
+          --collect-all _sounddevice_data \
           "${CUDA_IMPORTS[@]}" \
           run.py
 
@@ -384,8 +391,8 @@ jobs:
         [ -f LICENSE ] && cp LICENSE "${PKG}/"
 
         if [ "${{ matrix.variant }}" = "GPU" ]; then
-          VARIANT_NOTE="GPU 版（CUDA 12.8），支持 NVIDIA 显卡加速
-        必须使用可用的 NVIDIA CUDA 环境；CUDA 不可用时程序会明确报错并停止"
+          VARIANT_NOTE="GPU 版：已内置 CUDA 12.8 PyTorch/cuDNN/NVRTC 等运行库；无需另装 CUDA Toolkit
+        仍需 NVIDIA 驱动兼容 CUDA 12.8；无 GPU 的 CI 只完成打包运行库检查，未验证实时变声音频延迟"
         else
           VARIANT_NOTE="CPU 版，无需显卡即可运行
         如需 GPU 加速，请下载 GPU 版本或使用本地安装方式：python install.py"
@@ -398,11 +405,11 @@ jobs:
 
         使用方法：
           双击 ${EXE_NAME} 启动
-          浏览器访问 http://127.0.0.1:7860
+          打开原生桌面 Studio：AI 翻唱 / RVC 实时变声 / 模型管理
 
         ${VARIANT_NOTE}
 
-        基础与默认分离模型已内置；角色模型按需下载或导入
+        内置 HuBERT、RMVPE 和默认分离模型；角色音色模型需自行导入
         无需安装 Python，解压即用
         HEREDOC
         else
@@ -414,11 +421,11 @@ jobs:
         使用方法：
           chmod +x ${EXE_NAME}
           ./${EXE_NAME}
-          浏览器访问 http://127.0.0.1:7860
+          打开原生桌面 Studio：AI 翻唱 / RVC 实时变声 / 模型管理
 
         ${VARIANT_NOTE}
 
-        基础与默认分离模型已内置；角色模型按需下载或导入
+        内置 HuBERT、RMVPE 和默认分离模型；角色音色模型需自行导入
         无需安装 Python，解压即用
         HEREDOC
         fi
