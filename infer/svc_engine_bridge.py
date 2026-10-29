@@ -16,7 +16,7 @@ from typing import Literal
 import numpy as np
 import soundfile as sf
 
-EngineName = Literal["seed_vc", "yingmusic_svc"]
+EngineName = Literal["seed_vc", "yingmusic_svc", "soulx_singer"]
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ def _required_file(value: Path, label: str) -> Path:
 
 
 def _validate(job: SVCJob) -> tuple[Path, Path, Path, Path, Path, Path | None, Path | None]:
-    if job.engine not in ("seed_vc", "yingmusic_svc"):
+    if job.engine not in ("seed_vc", "yingmusic_svc", "soulx_singer"):
         raise ValueError(f"Unsupported singing backend: {job.engine!r}")
     if type(job.diffusion_steps) is not int or not 1 <= job.diffusion_steps <= 150:
         raise ValueError("diffusion_steps must be an integer in [1, 150]")
@@ -63,7 +63,7 @@ def _validate(job: SVCJob) -> tuple[Path, Path, Path, Path, Path, Path | None, P
     folder = Path(job.engine_repository).expanduser().resolve()
     if not folder.is_dir():
         raise FileNotFoundError(f"Backend repository missing: {folder}")
-    script = _required_file(folder / ("inference.py" if job.engine == "seed_vc" else "my_inference.py"), "Backend entrypoint")
+    script = _required_file(folder / ({"seed_vc": "inference.py", "yingmusic_svc": "my_inference.py", "soulx_singer": "cli/inference_svc.py"}[job.engine]), "Backend entrypoint")
     output = Path(job.output_wav).expanduser().resolve()
     if output.suffix.lower() != ".wav":
         raise ValueError("Output path must be .wav")
@@ -71,8 +71,8 @@ def _validate(job: SVCJob) -> tuple[Path, Path, Path, Path, Path, Path | None, P
         raise ValueError("Refusing to overwrite source or reference audio")
     if (job.checkpoint is None) != (job.model_config is None):
         raise ValueError("Checkpoint and model config must be supplied together")
-    if job.engine == "yingmusic_svc" and job.checkpoint is None:
-        raise ValueError("YingMusic-SVC requires a locally installed checkpoint and YAML config")
+    if job.engine in ("yingmusic_svc", "soulx_singer") and job.checkpoint is None:
+        raise ValueError("This SVC engine requires a locally installed checkpoint and YAML config")
     checkpoint = _required_file(job.checkpoint, "Checkpoint") if job.checkpoint else None
     config = _required_file(job.model_config, "Model config") if job.model_config else None
     return source, target, output, folder, python, checkpoint, config
@@ -106,7 +106,8 @@ def convert_vocals(job: SVCJob) -> Path:
             if checkpoint:
                 args += ["--checkpoint", str(checkpoint), "--config", str(config)]
         else:
-            worker = Path(__file__).resolve().parents[1] / "tools" / "yingmusic_svc_worker.py"
+            worker_name = "yingmusic_svc_worker.py" if job.engine == "yingmusic_svc" else "soulx_svc_worker.py"
+            worker = Path(__file__).resolve().parents[1] / "tools" / worker_name
             worker = _required_file(worker, "AI-RVC YingMusic worker")
             args += [
                 str(worker),
@@ -132,7 +133,11 @@ def convert_vocals(job: SVCJob) -> Path:
         if result.returncode != 0:
             output_log = (result.stderr + "\n" + result.stdout)[-4000:]
             raise RuntimeError(f"{job.engine} exited {result.returncode}:\n{output_log}")
-        rendered = sorted(scratch.rglob("*.wav"))
+        # SoulX preprocessing also emits temporary vocal WAVs; the output
+        # contract is only the generated stem, not those intermediates.
+        rendered = ([scratch / "generated" / "generated.wav"]
+                    if job.engine == "soulx_singer" else sorted(scratch.rglob("*.wav")))
+        rendered = [p for p in rendered if p.is_file()]
         if len(rendered) != 1:
             raise RuntimeError(f"{job.engine} must create exactly one converted vocal WAV, found {len(rendered)}")
         converted, rate = sf.read(str(rendered[0]), dtype="float32", always_2d=True)
