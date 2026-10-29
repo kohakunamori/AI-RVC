@@ -65,6 +65,57 @@ The **SVC 模型管理 / Models** tab centrally lists RVC, Seed-VC, YingMusic-SV
 
 Known limitations: GPUs, official model checkpoints and Windows 50-series execution are untested in this PR. New SVC engines may still require model downloads using their own upstream installation instructions; the UI does not automatically install code, Python or checkpoints. Karaoke default is MVSep 9205 and uses existing weights. New engines bypass existing RVC-specific source constraints, protecting unprocessed high frequency detail.
 
+## Shared resource policy (implemented 2026-10-29)
+
+The Models tab now configures a **shared Python interpreter** and one common
+**model cache directory** (default: assets/model_cache). Each engine may
+override the interpreter when incompatible package requirements demand it.
+Use a shared Python environment only if PyTorch/CUDA, Transformers and other
+requirements are compatible. The WebUI pip-check button tests declared
+dependency conflicts, not runtime import or GPU compatibility.
+
+### Shared weights and memory
+
+- External subprocesses receive common HF_HOME, HF_HUB_CACHE and TORCH_HOME
+  directories to maximize reuse of standard Hugging Face and PyTorch downloads.
+  Some upstream projects override these paths internally (YingMusic-SVC
+  currently sets its own HF_HUB_CACHE), so **not every external download is
+  guaranteed to deduplicate**. Existing user caches are never silently moved
+  or deleted, and distinct model architectures require distinct weights.
+- Only one selected SVC backend subprocess is launched for a song. Exiting
+  frees its VRAM and process heap. This trades a startup cost for much
+  lower idle GPU memory, and avoids keeping three models loaded together.
+- Long external logs stream to a temporary disk file instead of filling RAM.
+- Output Float32 WAV is validated and copied in blocks of 65,536 frames;
+  it does not require a second complete in-memory copy of the generated song.
+
+### Reusable SoulX reference audio / F0
+
+SoulX stores **only preprocessed target singer reference WAV and F0** in the
+local shared cache, using the input audio checksum, upstream preprocessing
+source code and model configuration to invalidate changed features. Each
+source song still runs its own pitch preprocessing. Repeated conversions
+for the same singer can reuse those saved reference features.
+
+Stored reference audio is personal media: the folder is
+shared_cache/preprocess/soulx_reference and can be deleted manually.
+Set AI_RVC_REFERENCE_CACHE=0 to disable this persistent voice cache.
+Avoid removing its files while jobs run. After upstream weight changes,
+clear it manually if preprocessing weights have changed without changes
+to configuration or source code. This cache never uploads a recording.
+
+### WebUI setup
+
+1. In **SVC 模型管理 / Models**, set a compatible **共享 Python** path,
+   or leave it blank to use each engine's separate environment.
+2. Set a common cache directory and save; run **pip check** for conflicts.
+3. In each SVC engine entry, leave its **专用 Python** field blank to use
+   the shared environment, or set an explicit override where required.
+4. Keep each engine repository and checkpoint path explicitly configured.
+   Valid file paths do not prove model import or actual CUDA inference.
+5. CLI calls to tools/run_svc_engine.py can inherit missing interpreter and
+   model paths from this same registry rather than duplicating settings.
+
 ## Development schedule (gated, no implied completion)
 
 ### P0 — Accept actual model inference
