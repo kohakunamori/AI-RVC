@@ -17,7 +17,7 @@ def verify(executable: Path, *, audio_only: bool = False) -> list[dict]:
         env = dict(os.environ, PYTHONPATH="", PYTHONHOME="", PYTHONUTF8="1",
                    AI_RVC_DEVICE="cpu", NUMBA_CACHE_DIR=str(cache),
                    NUMBA_CACHE_LOCATOR_CLASSES="UserProvidedCacheLocator",
-                   NUMBA_DEBUG_CACHE="1", GRADIO_ANALYTICS_ENABLED="False",
+                   NUMBA_DEBUG_CACHE="1", QT_QPA_PLATFORM="offscreen",
                    HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
         reports = []
         for phase in ("cold", "warm"):
