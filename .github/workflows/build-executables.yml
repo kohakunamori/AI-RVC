@@ -149,7 +149,7 @@ jobs:
       if: steps.selection.outputs.should_run == 'true' && runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential libsndfile1 libsamplerate0 ffmpeg portaudio19-dev
+        sudo apt-get install -y build-essential libsndfile1 libsamplerate0 ffmpeg portaudio19-dev libegl1 libgl1 libopengl0
 
     - name: Install FFmpeg (Windows)
       if: steps.selection.outputs.should_run == 'true' && runner.os == 'Windows'
