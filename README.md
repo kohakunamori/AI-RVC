@@ -1,6 +1,7 @@
 # AI-RVC 一键 AI 翻唱 / RVC Voice Conversion WebUI
 
 > **AI-RVC Studio 原生桌面版：** 本地运行 `python run.py` 或 Windows 双击 `start-desktop.bat`，默认启动 PySide6 桌面 GUI，包含 **AI 翻唱、RVC 麦克风实时变声、模型管理**。不启动网页服务器；旧版 Gradio 仅在 `python run.py --web` 时运行。安装与使用请见 [桌面使用指南](docs/DESKTOP_STUDIO.md)。
+> **v2.0.0 便携发行包：** Windows/Linux GPU 包已配置 CUDA 12.8 用户态运行库（NVIDIA 驱动需另装），另提供 CPU 包。正式发布前请检查 [v2.0.0 发布说明](docs/releases/v2.0.0.md) 的 SHA-256 完整性与显卡验收边界。
 
 > **Free/local model audit (2026-10-29):** [Verified availability, optional SwiftF0 inference, and the opt-in DeReverb bypass](docs/LOCAL_SOTA_MODEL_AUDIT_2026-10.md). The highest-scoring MVSep models are **not** silently substituted when freely downloadable weights are unavailable; the stable RVC v1/v2 defaults remain pinned until A/B testing.
 
