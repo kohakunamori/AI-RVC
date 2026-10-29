@@ -7,7 +7,7 @@
 **Windows / Linux 推荐使用 [v2.0.0 GitHub Release](https://github.com/kohakunamori/AI-RVC/releases/tag/v2.0.0) 的 GPU 便携包。** GPU 包预置 PyTorch CUDA 12.8/cuDNN/NVRTC 和基础音频模型，无需另装 Python 或 CUDA Toolkit，但需预先安装兼容 NVIDIA 驱动。按附件说明下载同一版本的全部分卷及 SHA256SUMS 文件。
 
 
-Windows 首先根据自己的 NVIDIA 显卡和 CUDA 版本安装兼容的 PyTorch / torchaudio；之后在项目 Python 环境执行：
+Windows 首先根据自己的 NVIDIA 显卡和 CUDA 版本安装兼容的 PyTorch / torchaudio；之后在项目 Python 环境执行（Linux 使用实时声卡前还需安装 `libportaudio2`，部分发行版需补齐 `libegl1`、`libgl1`）：
 
 ```powershell
 python -m pip install -r requirements_desktop.txt
