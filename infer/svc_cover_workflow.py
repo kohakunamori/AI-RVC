@@ -35,7 +35,7 @@ def run_svc_cover(
 
     if input_mode not in ("song", "vocals"):
         raise ValueError(f"Unsupported input mode: {input_mode}")
-    if engine not in ("seed_vc", "yingmusic_svc"):
+    if engine not in ("seed_vc", "yingmusic_svc", "soulx_singer"):
         raise ValueError(f"Unsupported external SVC engine: {engine}")
     source = Path(audio_path).resolve()
     reference = Path(reference_path).resolve()
