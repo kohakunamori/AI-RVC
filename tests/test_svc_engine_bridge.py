@@ -76,6 +76,30 @@ class TestLocalSVCBridge(unittest.TestCase):
         self.assertTrue(any("yingmusic_svc_worker.py" in token for token in args))
         self.assertEqual(args[args.index("--pitch-shift")+1], "2")
 
+    def test_soulx_uses_own_f0_worker_and_single_generated_wav(self):
+        (self.engine_repo/"cli").mkdir()
+        (self.engine_repo/"cli"/"inference_svc.py").write_text("# mock")
+        checkpoint, cfg = self.root/"soulx.pt", self.root/"soulx.yml"
+        checkpoint.write_bytes(b"test")
+        cfg.write_text("model: test")
+        job = replace(self.job(), engine="soulx_singer",
+                      checkpoint=checkpoint, model_config=cfg)
+        def fake_soulx(args, **kwargs):
+            output = Path(args[args.index("--output")+1])
+            (output/"generated").mkdir()
+            (output/"preprocess_prompt").mkdir()
+            sf.write(output/"generated"/"generated.wav",
+                     np.ones(4410, dtype="float32")*0.2, 44100, subtype="FLOAT")
+            sf.write(output/"preprocess_prompt"/"vocal.wav",
+                     np.ones(4410, dtype="float32")*0.3, 44100, subtype="FLOAT")
+            return subprocess.CompletedProcess(args, 0, "", "")
+        with patch("_svc_bridge_under_test.subprocess.run", side_effect=fake_soulx) as mock:
+            output = convert_vocals(job)
+        self.assertEqual(sf.info(output).subtype, "FLOAT")
+        args = mock.call_args.args[0]
+        self.assertTrue(any("soulx_svc_worker.py" in arg for arg in args))
+        self.assertEqual(args[args.index("--pitch-shift")+1], "0")
+
     def test_does_not_silently_fallback_after_failure(self):
         fail = subprocess.CompletedProcess([], 2, "failed", "")
         with patch("_svc_bridge_under_test.subprocess.run", return_value=fail):
