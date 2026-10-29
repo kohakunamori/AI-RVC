@@ -183,7 +183,17 @@ class RealtimeRVC:
             return
         if status:
             self.overruns += 1
-        incoming_block = np.asarray(indata[:, 0], dtype=np.float32).copy()\n        try:\n            self._incoming.put_nowait(incoming_block)\n        except queue.Full:\n            self.overruns += 1\n            # Prefer fresh microphone audio: evict the oldest unprocessed block.\n            try:\n                self._incoming.get_nowait()\n                self._incoming.put_nowait(incoming_block)\n            except queue.Empty:\n                pass
+        incoming_block = np.asarray(indata[:, 0], dtype=np.float32).copy()
+        try:
+            self._incoming.put_nowait(incoming_block)
+        except queue.Full:
+            self.overruns += 1
+            # Prefer fresh microphone audio: evict the oldest unprocessed block.
+            try:
+                self._incoming.get_nowait()
+                self._incoming.put_nowait(incoming_block)
+            except queue.Empty:
+                pass
         try:
             block = self._outgoing.get_nowait()
             if block.shape[0] == frames:
@@ -193,9 +203,13 @@ class RealtimeRVC:
         except queue.Empty:
             self.underruns += 1
 
-    def _run(self) -> None:\n        import sounddevice as sd\n        import torch\n        model = None
+    def _run(self) -> None:
+        model = None
         stream = None
+        torch = None
         try:
+            import sounddevice as sd
+            import torch
             from types import SimpleNamespace
             from infer.lib.rtrvc import RVC
             cfg = SimpleNamespace(device=torch.device(self.settings.device),
@@ -270,7 +284,7 @@ class RealtimeRVC:
                     stream.close()
             self._stream = None
             del model
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
             if self.state != "error":
                 self.state = "stopped"
