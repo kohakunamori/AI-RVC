@@ -41,7 +41,7 @@ class TestLocalSVCBridge(unittest.TestCase):
                       engine_python=self.python, pitch_shift=0, fp16=False)
 
     def fake_run(self, args, **kwargs):
-        self.assertEqual(kwargs["cwd"], str(self.engine_repo))
+        self.assertEqual(Path(kwargs["cwd"]).resolve(), self.engine_repo.resolve())
         self.assertNotIn("shell", kwargs)
         target_dir = Path(args[args.index("--output")+1])
         (target_dir/"converted").mkdir(exist_ok=True)
