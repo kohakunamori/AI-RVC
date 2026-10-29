@@ -1,5 +1,7 @@
 # AI-RVC 一键 AI 翻唱 / RVC Voice Conversion WebUI
 
+> **Next-generation local singing engines (2026-10):** [Seed-VC and YingMusic-SVC isolated inference adapters + naturalness/timbre roadmap](docs/SVC_ENGINE_QUALITY_ROADMAP_2026.md). This is an opt-in advanced CLI until GPU tests and UI integration are complete; existing RVC character models remain supported.
+
 AI-RVC 是一个开源的 [RVC v1/v2](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) 翻唱 WebUI。项目包含人声与伴奏分离、主唱与和声分离、F0 提取、RVC 音色转换、FAISS 检索和混音导出，可直接处理 MP3、WAV 和 FLAC 歌曲。
 
 > 在线体验：[TelkNet AI 翻唱](https://telknet.cc/tools/ai-rvc)
