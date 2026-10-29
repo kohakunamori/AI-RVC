@@ -16,6 +16,7 @@ Updated 2026-10-29. Status: design + two isolated CLI bridges committed; **no re
 | Seed-VC singing 44k | [code](https://github.com/Plachtaa/seed-vc), [checkpoints](https://huggingface.co/Plachta/Seed-VC), GPL-3 | Local F0-conditioned, direct M4Singer vs RVC comparison; official repo archived | New isolated bridge implemented; inference untested |
 | YingMusic-SVC | [MIT project](https://github.com/GiantAILab/YingMusic-SVC), [full checkpoint](https://huggingface.co/GiantAILab/YingMusic-SVC/blob/main/YingMusic-SVC-full.pt) | Singing-specific Flow training; robust to harmony and F0 errors; CUDA external env | New isolated bridge implemented; inference untested |
 | HQ-SVC | [AAAI 2026](https://ojs.aaai.org/index.php/AAAI/article/view/40249), [code](https://github.com/ShawnPi233/HQ-SVC), [weights](https://huggingface.co/shawnpi/HQ-SVC) | High-fidelity zero-shot and super-resolution; Linux/WSL CUDA 11.8+ | Planned headless adapter; inspect code and weight licenses before redistribution |
+| SoulX-Singer-SVC | [Apache-2.0 source & weights](https://github.com/Soul-AILab/SoulX-Singer), [pretrained models](https://huggingface.co/Soul-AILab/SoulX-Singer) | 2026 zero-shot audio-to-audio SVC with pitch control; prompt + source F0 preprocessing required; Japanese fidelity needs independent evaluation | High-priority next adapter; local code/weights verified but not implemented here |
 
 Published Seed-VC M4Singer experiment: RVC v2 F0CORR 0.9404 / RMSE 30.43 / SECS 0.7264 / OVRL 3.12; Seed-VC 0.9375 / 33.35 / 0.7405 / 3.06. None dominates on every metric. Other research results use different evaluation datasets; don't mix benchmark numbers.
 
@@ -70,8 +71,8 @@ Use the upstream model's separate environment installation instructions. Do not 
 - Preserve converted raw vocals; apply postprocessing per track with toggles, not forced serial gates. Reintroduce calibrated room reverb only after reconstruction, never overprocess source.
 - Separate identity leakage to original singer from resemblance to reference, rather than just using one speaker embedding score.
 
-### P2 — HQ-SVC, reference and timbre enhancements
-- Adapt official HQ-SVC headlessly in Linux/WSL CUDA, only after verified reference inference and license checks. Add on-device engine readiness tests.
+### P2 — SoulX-Singer-SVC / HQ-SVC, reference and timbre enhancements
+- Prioritize SoulX-Singer-SVC (Apache-2.0, public SVC weights, local F0 pipeline) for a third engine adapter; check whether its audio-to-audio preprocess preserves Japanese lyrics and whether high notes are stable.\n- Adapt official HQ-SVC headlessly in Linux/WSL CUDA, only after verified reference inference and license checks. Add on-device engine readiness tests.
 - Investigate multi-reference conditioning, safe vibrato preservation, source/destination loudness normalization, phase-consistent backing mixing.
 - Test fine-tuning per singer where a zero-shot engine underperforms a high-quality trained RVC checkpoint. Fine-tuning is an alternative, not a free win.
 
