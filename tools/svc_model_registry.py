@@ -30,7 +30,7 @@ KNOWN_ENGINES = {
     "soulx_singer": {
         "name": "SoulX-Singer-SVC",
         "homepage": "https://github.com/Soul-AILab/SoulX-Singer",
-        "checkpoint_required": True, "supported": False,
+        "checkpoint_required": True, "supported": True,
     },
     "hq_svc": {
         "name": "HQ-SVC",
@@ -102,7 +102,8 @@ def engine_health(engine: str, registry: dict | None = None) -> tuple[bool, str]
     python = Path(values.get("engine_python") or ".").expanduser()
     if not values.get("engine_repository") or not repo.is_dir():
         return False, "请先配置有效的引擎仓库目录"
-    entry = repo / ("inference.py" if engine == "seed_vc" else "my_inference.py")
+    entry = repo / {"seed_vc": "inference.py", "yingmusic_svc": "my_inference.py",
+                    "soulx_singer": "cli/inference_svc.py"}[engine]
     if not entry.is_file():
         return False, f"缺少引擎入口：{entry.name}"
     if not values.get("engine_python") or not python.is_file():
@@ -136,7 +137,7 @@ def status_markdown() -> str:
 
 
 def get_engine_job_options(engine: str, registry: dict | None = None) -> dict:
-    if engine not in ("seed_vc", "yingmusic_svc"):
+    if engine not in ("seed_vc", "yingmusic_svc", "soulx_singer"):
         raise ValueError("Engine is not a supported external SVC backend")
     values = load_registry() if registry is None else registry
     healthy, reason = engine_health(engine, values)
