@@ -71,8 +71,14 @@ def check_desktop() -> list[str]:
         window.timer.stop()
         window.close()
         window.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
         app.processEvents()
+        # Keep QApplication alive until all child Python wrappers are reclaimed.
+        if "tabs" in locals():
+            del tabs
+        del window
+        import gc
+        gc.collect()
         app.quit()
 
 
