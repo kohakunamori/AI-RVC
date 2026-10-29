@@ -1,0 +1,50 @@
+name: Native desktop and realtime RVC contracts
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "tests/test_desktop_realtime.py"
+      - "run.py"
+      - "requirements_desktop.txt"
+      - "start-desktop.bat"
+      - ".github/workflows/desktop-realtime-contracts.yml"
+  push:
+    branches: [master]
+    paths:
+      - "desktop/**"
+      - "tests/test_desktop_realtime.py"
+      - "run.py"
+      - "requirements_desktop.txt"
+      - "start-desktop.bat"
+      - ".github/workflows/desktop-realtime-contracts.yml"
+jobs:
+  desktop-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lightweight desktop test dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y libportaudio2 libgl1
+          python -m pip install numpy scipy soundfile "PySide6>=6.8,<7" "sounddevice>=0.5,<1"
+      - name: Validate source compilation
+        run: python -m py_compile run.py desktop/__init__.py desktop/cover.py desktop/realtime.py desktop/gui.py tests/test_desktop_realtime.py
+      - name: Run mocked audio and entrypoint tests
+        run: python -m unittest discover -s tests -p test_desktop_realtime.py -v
+      - name: Smoke-test real Qt window without X11, GPU or microphone
+        run: |
+          python - <<'PY'
+          from PySide6.QtWidgets import QApplication
+          from desktop.gui import DesktopWindow
+          app = QApplication([])
+          window = DesktopWindow()
+          assert window.windowTitle().startswith("AI-RVC Studio")
+          assert window.centralWidget() is not None
+          window.close()
+          app.quit()
+          PY
