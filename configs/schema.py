@@ -12,7 +12,7 @@ COVER_KEYS = {
     "f0_method", "index_rate", "rms_mix_rate", "protect", "speaker_id", "silence_gate",
     "silence_threshold_db", "silence_smoothing_ms", "silence_min_duration_ms",
     "default_vocals_volume", "default_accompaniment_volume", "default_reverb", "backing_mix",
-    "source_constraint_mode", "vc_pipeline_mode", "input_mode",
+    "source_constraint_mode", "vc_pipeline_mode", "input_mode", "dereverb_mode",
 }
 
 
@@ -37,9 +37,10 @@ def validate_config(config: dict) -> dict:
     choices = {
         "input_mode": {"song", "vocals"},
         "separator": {"roformer", "demucs", "uvr5"},
-        "f0_method": {"rmvpe", "pm", "fcpe"} if cover.get("use_official", True) or cover.get("vc_pipeline_mode") == "official" else {"rmvpe", "pm", "harvest", "crepe"},
+        "f0_method": {"rmvpe", "pm", "fcpe"} if cover.get("use_official", True) or cover.get("vc_pipeline_mode") == "official" else {"rmvpe", "pm", "harvest", "crepe", "swiftf0"},
         "vc_pipeline_mode": {"current", "official"},
         "source_constraint_mode": {"auto", "off", "on"},
+        "dereverb_mode": {"force", "off"},
         "uvr5_format": {"wav"},
     }
     for key, values in choices.items():
