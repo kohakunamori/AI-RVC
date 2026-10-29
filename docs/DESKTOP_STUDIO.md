@@ -19,7 +19,7 @@ python run.py
 
 - **AI 翻唱**：RVC v1/v2 的 `.pth`、`.index` 或 Seed-VC / YingMusic / SoulX 的参考声音，支持完整歌曲/分离干声、音高、去混响、扩散步数。
 - **实时变声**：选本地 RVC `.pth`，输入麦克风与输出声卡（可以是 VB-CABLE 等已安装的虚拟设备），调整 F0 算法、音高、缓冲、输入/输出增益。
-- **模型管理**：和原项目 SVC 注册中心共用 `configs/svc_engines.json`，兼容引擎可使用共享 Python / 权重缓存。
+- **模型管理**：列出本地已下载的 RVC `.pth` 声线，能一键选为翻唱或实时变声模型；SVC 共享原项目的 `configs/svc_engines.json`，兼容引擎可复用 Python / 权重缓存。
 
 ### 实时模式运行边界
 
