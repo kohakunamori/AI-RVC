@@ -304,6 +304,7 @@ jobs:
         SEP="${{ matrix.sep }}"
         NAME="AI-RVC-${{ matrix.platform }}-${{ matrix.variant }}"
         CUDA_IMPORTS=()
+        PORTAUDIO_FLAGS=()
         WINDOWED_FLAGS=()
         if [ "${{ matrix.platform }}" = "Linux" ] && [ "${{ matrix.variant }}" = "GPU" ]; then
           CUDA_IMPORTS+=(--hidden-import nvidia)
@@ -311,6 +312,8 @@ jobs:
         if [ "${{ matrix.platform }}" = "Windows" ]; then
           # Native desktop executable, without an auxiliary console window.
           WINDOWED_FLAGS+=(--windowed)
+          # On Windows, sounddevice wheels include PortAudio DLLs as a package.
+          PORTAUDIO_FLAGS+=(--collect-all _sounddevice_data)
         fi
         pyinstaller --name "${NAME}" \
           "${WINDOWED_FLAGS[@]}" \
@@ -364,7 +367,7 @@ jobs:
           --collect-all transformers \
           --collect-all rvc_mcp \
           --collect-all mcp \
-          --collect-all _sounddevice_data \
+          "${PORTAUDIO_FLAGS[@]}" \
           "${CUDA_IMPORTS[@]}" \
           run.py
 
