@@ -16,7 +16,7 @@ Updated 2026-10-29. Status: design + two isolated CLI bridges committed; **no re
 | Seed-VC singing 44k | [code](https://github.com/Plachtaa/seed-vc), [checkpoints](https://huggingface.co/Plachta/Seed-VC), GPL-3 | Local F0-conditioned, direct M4Singer vs RVC comparison; official repo archived | New isolated bridge implemented; inference untested |
 | YingMusic-SVC | [MIT project](https://github.com/GiantAILab/YingMusic-SVC), [full checkpoint](https://huggingface.co/GiantAILab/YingMusic-SVC/blob/main/YingMusic-SVC-full.pt) | Singing-specific Flow training; robust to harmony and F0 errors; CUDA external env | New isolated bridge implemented; inference untested |
 | HQ-SVC | [AAAI 2026](https://ojs.aaai.org/index.php/AAAI/article/view/40249), [code](https://github.com/ShawnPi233/HQ-SVC), [weights](https://huggingface.co/shawnpi/HQ-SVC) | High-fidelity zero-shot and super-resolution; Linux/WSL CUDA 11.8+ | Planned headless adapter; inspect code and weight licenses before redistribution |
-| SoulX-Singer-SVC | [Apache-2.0 source & weights](https://github.com/Soul-AILab/SoulX-Singer), [pretrained models](https://huggingface.co/Soul-AILab/SoulX-Singer) | 2026 zero-shot audio-to-audio SVC with pitch control; prompt + source F0 preprocessing required; Japanese fidelity needs independent evaluation | High-priority next adapter; local code/weights verified but not implemented here |
+| SoulX-Singer-SVC | [Apache-2.0 source & weights](https://github.com/Soul-AILab/SoulX-Singer), [pretrained models](https://huggingface.co/Soul-AILab/SoulX-Singer) | 2026 zero-shot audio-to-audio SVC with pitch control; prompt + source F0 preprocessing required; Japanese fidelity needs independent evaluation | Isolated local SVC worker now implemented; requires official F0 preprocessing, checkpoint and config; GPU inference unverified |
 
 Published Seed-VC M4Singer experiment: RVC v2 F0CORR 0.9404 / RMSE 30.43 / SECS 0.7264 / OVRL 3.12; Seed-VC 0.9375 / 33.35 / 0.7405 / 3.06. None dominates on every metric. Other research results use different evaluation datasets; don't mix benchmark numbers.
 
@@ -52,14 +52,14 @@ Use the upstream model's separate environment installation instructions. Do not 
 
 ## WebUI integration (implemented, not GPU-validated)
 
-The existing **AI Cover** tab now has a **Singing Engine** dropdown:
+The existing **AI Cover** tab now has a **Singing Engine** dropdown including the local SoulX-Singer-SVC backend:
 - **RVC v1/v2**: remains selected by default; select a character checkpoint/index exactly as before.
-- **Seed-VC / YingMusic-SVC**: upload a singer reference WAV or MP3 (requires permission to use that voice), choose diffusion steps and optional dereverb. Existing character RVC .pth/index are not required.
+- **Seed-VC / YingMusic-SVC / SoulX-Singer-SVC**: upload a singer reference WAV or MP3 (requires permission to use that voice), choose diffusion steps and optional dereverb. Existing character RVC .pth/index are not required.
 - For a full song, choose `song`; the selected Karaoke model produces lead vocals + backing/instrumental, the external SVC engine converts only the lead, and AI-RVC mixes the converted vocal with the accompaniment using the existing Float32 WAV export.
 - For an already-isolated vocal, choose `vocals`; the interface outputs the converted vocal and deliberately does not fabricate an accompaniment or mixed song.
 
-The **SVC 模型管理 / Models** tab centrally lists RVC, Seed-VC, YingMusic-SVC and planned HQ-SVC / SoulX-Singer-SVC. For installed external engines configure:
-`engine_repository` (cloned source), `engine_python` (absolute Python executable within isolated env), plus `checkpoint` and `model_config` (required together for YingMusic, optional for Seed). These are saved locally in `configs/svc_engines.json`; path validation does **not** prove that dependencies, CUDA or inference have passed. No automatic pip install and no paid API.
+The **SVC 模型管理 / Models** tab centrally lists RVC, Seed-VC, YingMusic-SVC, SoulX-Singer-SVC and planned HQ-SVC. For installed external engines (Seed, YingMusic or SoulX) configure:
+`engine_repository` (cloned source), `engine_python` (absolute Python executable within isolated env), plus `checkpoint` and `model_config` (required together for YingMusic and SoulX, optional for Seed). These are saved locally in `configs/svc_engines.json`; path validation does **not** prove that dependencies, CUDA or inference have passed. No automatic pip install and no paid API.
 
 **When switching to Seed-VC or YingMusic-SVC, the character dropdown becomes inactive**; when returning to RVC, the original character selection and conversion pathway are retained.
 
