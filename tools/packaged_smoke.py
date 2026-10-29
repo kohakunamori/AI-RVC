@@ -1,10 +1,9 @@
-"""Exercise the actual frozen app, native audio dependencies and HTTP surface."""
+"""Exercise frozen native desktop Qt GUI and audio backends without hardware."""
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-import urllib.request
 from pathlib import Path
 
 
@@ -46,35 +45,28 @@ def check_audio(output: Path) -> dict:
             "cache_hits": sum(kernel.stats.cache_hits.values()), "samples": len(audio)}
 
 
-def check_ui() -> list[str]:
-    from ui import app as ui_app
-    from ui.gradio_assets import patch_upload_route
-    from ui.server_runtime import configure_browser_server
+def check_desktop() -> list[str]:
+    """Exercise the actual frozen Qt application without HTTP or microphones."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QTabWidget
+    from desktop.gui import DesktopWindow
 
-    configure_browser_server()
-    checked = []
-    for language in ui_app.SUPPORTED_LANGUAGES:
-        ui_app.config = {**ui_app.config, "language": language}
-        ui_app.i18n = ui_app.load_i18n(language)
-        blocks = ui_app.create_ui()
-        try:
-            blocks.queue()
-            blocks.launch(server_name="127.0.0.1", inbrowser=False, share=False,
-                          prevent_thread_lock=True, i18n=ui_app.ui_catalog())
-            ui_app._patch_gradio_file_download(blocks)
-            patch_upload_route(blocks)
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(blocks.local_url, timeout=30) as response:
-                if response.status != 200 or b"gradio" not in response.read().lower():
-                    raise RuntimeError("Bundled UI HTML is unavailable")
-            with opener.open(blocks.local_url + "config", timeout=30) as response:
-                configuration = json.load(response)
-                if not configuration.get("components") or not configuration.get("dependencies"):
-                    raise RuntimeError("Bundled UI config is incomplete")
-            checked.append(language)
-        finally:
-            blocks.close()
-    return checked
+    app = QApplication.instance() or QApplication([])
+    window = DesktopWindow()
+    try:
+        assert window.windowTitle().startswith("AI-RVC Studio")
+        tabs = window.findChild(QTabWidget)
+        if tabs is None or tabs.count() != 3:
+            raise RuntimeError("Desktop Studio is missing expected native pages")
+        labels = [tabs.tabText(i) for i in range(tabs.count())]
+        if not all(labels) or not any("实时" in label for label in labels):
+            raise RuntimeError("Realtime voice conversion tab is missing")
+        return labels
+    finally:
+        window.close()
+
+
 
 
 def main() -> None:
@@ -84,7 +76,7 @@ def main() -> None:
     args = parser.parse_args()
     report = {"frozen": bool(getattr(sys, "frozen", False)), "audio": check_audio(args.output)}
     if not args.audio_only:
-        report["ui_languages"] = check_ui()
+        report["desktop_tabs"] = check_desktop()
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True), flush=True)

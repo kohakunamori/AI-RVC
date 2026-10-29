@@ -21,7 +21,7 @@ separator_datas = [
 ]
 
 bundle_datas, bundle_binaries, bundle_imports = [], [], []
-for package in ('torch', 'torchaudio', 'gradio', 'gradio_client', 'torchfcpe', 'transformers', 'rvc_mcp', 'mcp'):
+for package in ('torch', 'torchaudio', 'sounddevice', '_sounddevice_data', 'torchfcpe', 'transformers', 'rvc_mcp', 'mcp'):
     package_datas, package_binaries, package_imports = collect_all(package)
     bundle_datas.extend(package_datas)
     bundle_binaries.extend(package_binaries)
@@ -36,6 +36,7 @@ a = Analysis(
     binaries=bundle_binaries,
     datas=[
         ('ui/*.py', 'ui'),
+        ('desktop/*.py', 'desktop'),
         ('ui/multitrack/dist/player.html', 'ui/multitrack/dist'),
         ('infer', 'infer'),
         ('lib', 'lib'),
@@ -58,7 +59,11 @@ a = Analysis(
     hiddenimports=[
         'torch',
         'torchaudio',
-        'gradio',
+        'desktop.gui',
+        'desktop.realtime',
+        'sounddevice',
+        'PySide6.QtWidgets',
+        'PySide6.QtCore',
         'librosa',
         'soundfile',
         'scipy',
@@ -106,7 +111,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=sys.platform != 'win32',
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

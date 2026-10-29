@@ -1,3 +1,14 @@
+## 2.0.0 — Native Desktop Studio + Real-time RVC — 2026-10-29
+
+- 原生 PySide6 GUI 成为本地默认入口；AI 翻唱、实时 RVC 麦克风变声、模型管理共用模型缓存和权重。
+- 使用已有 RVC HuBERT / F0 / 实时推理后端；声卡回调与 GPU 推理分离、SOLA 缓冲拼接。
+- Windows/Linux 提供 GPU CUDA 12.8 及 CPU 便携包，预置 PyTorch、cuDNN/NVRTC、FFmpeg 和默认基础模型；NVIDIA 驱动仍需系统安装。
+- 发行冻结程序验收改为原生 Qt GUI 启动、音频处理、CUDA 库/摘要校验。具体见 docs/releases/v2.0.0.md。
+
+### English
+
+Native desktop Studio replaces the browser as the default local UI. Adds realtime RVC voice conversion, shared model management and CUDA 12.8-enabled Windows/Linux portable bundles, with frozen Qt and audio package checks. Physical GPU/microphone latency still requires device acceptance.
+
 # Changelog
 
 ## 1.6.0 同版本便携包修复 / portable rebuild — 2026-10-26
