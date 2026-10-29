@@ -22,5 +22,9 @@
     "engine_python": "",
     "checkpoint": "",
     "model_config": ""
+  },
+  "_shared": {
+    "engine_python": "",
+    "cache_directory": ""
   }
 }
