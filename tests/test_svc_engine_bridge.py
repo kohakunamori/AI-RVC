@@ -9,7 +9,16 @@ from pathlib import Path
 from unittest.mock import patch
 import numpy as np
 import soundfile as sf
-from infer.svc_engine_bridge import SVCJob, convert_vocals
+# The main infer/__init__.py imports torch; these tests intentionally avoid
+# installing the full GPU stack by importing the standalone bridge file.
+import importlib.util
+module_name = "_svc_bridge_under_test"
+bridge_path = Path(__file__).resolve().parents[1] / "infer" / "svc_engine_bridge.py"
+spec = importlib.util.spec_from_file_location(module_name, bridge_path)
+bridge_module = importlib.util.module_from_spec(spec)
+sys.modules[module_name] = bridge_module
+spec.loader.exec_module(bridge_module)
+SVCJob, convert_vocals = bridge_module.SVCJob, bridge_module.convert_vocals
 
 class TestLocalSVCBridge(unittest.TestCase):
     def setUp(self):
@@ -41,7 +50,7 @@ class TestLocalSVCBridge(unittest.TestCase):
         return subprocess.CompletedProcess(args, 0, "", "")
 
     def test_seed_preserves_pitch_and_emits_float(self):
-        with patch("infer.svc_engine_bridge.subprocess.run", side_effect=self.fake_run) as mock:
+        with patch("_svc_bridge_under_test.subprocess.run", side_effect=self.fake_run) as mock:
             output = convert_vocals(self.job())
         self.assertEqual(sf.info(output).subtype, "FLOAT")
         self.assertEqual(sf.info(output).samplerate, 44100)
@@ -60,7 +69,7 @@ class TestLocalSVCBridge(unittest.TestCase):
             convert_vocals(replace(self.job(), engine="yingmusic_svc"))
         job = replace(self.job(), engine="yingmusic_svc", checkpoint=checkpoint,
                       model_config=config, pitch_shift=2)
-        with patch("infer.svc_engine_bridge.subprocess.run", side_effect=self.fake_run) as mock:
+        with patch("_svc_bridge_under_test.subprocess.run", side_effect=self.fake_run) as mock:
             output = convert_vocals(job)
         self.assertTrue(output.is_file())
         args = mock.call_args.args[0]
@@ -69,7 +78,7 @@ class TestLocalSVCBridge(unittest.TestCase):
 
     def test_does_not_silently_fallback_after_failure(self):
         fail = subprocess.CompletedProcess([], 2, "failed", "")
-        with patch("infer.svc_engine_bridge.subprocess.run", return_value=fail):
+        with patch("_svc_bridge_under_test.subprocess.run", return_value=fail):
             with self.assertRaisesRegex(RuntimeError, "exited 2"):
                 convert_vocals(self.job())
         self.assertFalse((self.root/"converted.wav").exists())
@@ -85,7 +94,7 @@ class TestLocalSVCBridge(unittest.TestCase):
             out = Path(args[args.index("--output")+1])
             sf.write(out/"broken.wav", np.array([np.nan]), 44100, subtype="FLOAT")
             return subprocess.CompletedProcess(args, 0, "", "")
-        with patch("infer.svc_engine_bridge.subprocess.run", side_effect=broken):
+        with patch("_svc_bridge_under_test.subprocess.run", side_effect=broken):
             with self.assertRaisesRegex(ValueError, "non-finite"):
                 convert_vocals(self.job())
 
