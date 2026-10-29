@@ -64,7 +64,16 @@ def check_desktop() -> list[str]:
             raise RuntimeError("Realtime voice conversion tab is missing")
         return labels
     finally:
+        # Qt owns native audio/graphics resources and a timer tied to the window.
+        # Stop callbacks, explicitly destroy QObjects while QApplication exists,
+        # and flush deferred deletes before Python unloads bundled Qt libraries.
+        from PySide6.QtCore import QCoreApplication, QEvent
+        window.timer.stop()
         window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        app.processEvents()
+        app.quit()
 
 
 
