@@ -54,6 +54,12 @@ class TestSVCRegistry(unittest.TestCase):
         self.assertEqual(registry.load_registry(self.registry_file), data)
         self.assertTrue(json.loads(self.registry_file.read_text())["seed_vc"]["engine_python"])
 
+    def test_soulx_is_registered_and_requires_own_checkpoint(self):
+        data = registry.load_registry(self.registry_file)
+        self.assertIn("soulx_singer", data)
+        self.assertFalse(registry.engine_health("soulx_singer", data)[0])
+        self.assertIn("soulx_singer", [value for _, value in registry.engine_choices()])
+
     def test_yingmusic_requires_weight_and_config(self):
         data = registry.save_engine_config("yingmusic_svc", {
             "engine_repository": str(self.repo),
