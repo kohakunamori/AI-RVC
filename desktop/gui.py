@@ -229,8 +229,7 @@ class DesktopWindow(QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(self._cover_thread_done)
-        thread.start()
-        self.cover_thread, self.cover_worker = thread, worker
+        self.cover_thread, self.cover_worker = thread, worker\n        thread.start()
 
     def _cover_done(self, result):
         self.cover_log.appendPlainText("✅ 完成")
