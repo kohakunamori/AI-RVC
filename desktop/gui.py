@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Signal, Slot, Qt
@@ -229,7 +230,8 @@ class DesktopWindow(QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(self._cover_thread_done)
-        self.cover_thread, self.cover_worker = thread, worker\n        thread.start()
+        self.cover_thread, self.cover_worker = thread, worker
+        thread.start()
 
     def _cover_done(self, result):
         self.cover_log.appendPlainText("✅ 完成")
@@ -352,7 +354,7 @@ class DesktopWindow(QMainWindow):
             f0_method=self.live_f0.currentData(),
             input_gain=self.live_input_gain.value() / 100,
             output_gain=self.live_output_gain.value() / 100,
-            device=os.environ.get("AI_RVC_DEVICE", "cuda"),
+            device=(os.environ.get("AI_RVC_DEVICE") or json.loads((ROOT / "configs" / "config.json").read_text(encoding="utf-8")).get("device", "cuda")),
         )
         try:
             self.live = RealtimeRVC(settings)
