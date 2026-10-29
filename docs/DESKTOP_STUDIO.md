@@ -11,7 +11,7 @@ python -m pip install -r requirements_desktop.txt
 python run.py
 ```
 
-或双击 `start-desktop.bat`。桌面依赖列表**不包含** Gradio / FastAPI / MCP。模型和已安装 Python 环境仍复用项目共享资源管理，不重复下载已有 RVC 权重。
+或双击 `AI-RVC-Studio.pyw`（无控制台窗口）；需要查看报错信息时双击 `start-desktop.bat`。桌面依赖列表**不包含** Gradio / FastAPI / MCP。模型和已安装 Python 环境仍复用项目共享资源管理，不重复下载已有 RVC 权重。
 
 如需使用 RoFormer 的 GPU/ONNX Runtime，按原项目 GPU 安装说明额外安装匹配的 `audio-separator[gpu]==0.47.0`。首次运行之前，请先准备原项目的 HuBERT、RMVPE 等基础模型；离线翻唱分离模型也按原项目流程准备。桌面程序**不会自动从互联网下载**模型，也不会启动本地 HTTP 服务器。
 
