@@ -2,6 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Expected version (must match VERSION in the checked-out master)"
+        required: false
+        default: "2.0.0"
+        type: string
 
 permissions:
   contents: write
