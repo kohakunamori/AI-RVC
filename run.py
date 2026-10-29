@@ -9,8 +9,10 @@ import json
 from pathlib import Path
 
 # 添加项目根目录到路径
-ROOT_DIR = Path(__file__).parent
+ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR))
+# Legacy RVC checkpoints and HuBERT/F0 assets use project-relative paths.
+os.chdir(ROOT_DIR)
 
 from lib.ffmpeg_runtime import configure_ffmpeg_runtime
 from lib.console_i18n import get_console_language
