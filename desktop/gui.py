@@ -325,7 +325,7 @@ class DesktopWindow(QMainWindow):
         self.live_meter = QProgressBar()
         self.live_meter.setRange(0, 400)
         self.live_meter.setValue(0)
-        self.live_meter.setFormat("最近一次推理 %(value)d ms")
+        self.live_meter.setFormat("最近一次推理 %v ms")
         layout.addWidget(self.live_meter)
         layout.addWidget(QLabel("提示：请使用耳机监听防止啸叫；输出选虚拟声卡即可提供给其他应用。\\n"
                                "此模式为有缓冲的实时变声，延迟取决于设备、音高模型与 GPU。"))
