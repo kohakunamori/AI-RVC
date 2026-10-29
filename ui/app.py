@@ -1161,6 +1161,85 @@ def update_route_controls(mode: str, karaoke: bool, source_mode: Optional[str] =
     )
 
 
+def get_svc_config_ui(engine: str):
+    from tools.svc_model_registry import load_registry, status_markdown
+    info = load_registry().get(engine, {})
+    return (
+        info.get("engine_repository", ""),
+        info.get("engine_python", ""),
+        info.get("checkpoint", ""),
+        info.get("model_config", ""),
+        status_markdown(),
+    )
+
+
+def save_svc_config_ui(engine: str, repository: str, python: str, checkpoint: str, yaml_path: str):
+    from tools.svc_model_registry import save_engine_config, status_markdown
+    try:
+        save_engine_config(engine, {
+            "engine_repository": repository, "engine_python": python,
+            "checkpoint": checkpoint, "model_config": yaml_path,
+        })
+        return "✅ 模型位置已保存。仅验证文件路径，尚需实际 GPU 推理验收。\\n\\n" + status_markdown()
+    except Exception as exc:
+        return f"❌ 模型配置未保存: {exc}"
+
+
+def process_zero_shot_cover(
+    audio_path: str | None,
+    engine: str,
+    reference_audio: str | None,
+    pitch_shift: int,
+    karaoke_separation: bool,
+    vocals_volume: float,
+    accompaniment_volume: float,
+    reverb_amount: float,
+    input_mode: str,
+    diffusion_steps: int,
+    dereverb: bool,
+    progress,
+):
+    empty = (None,) * 7
+    if not audio_path or not reference_audio:
+        return (*empty, "请同时提供原始音频与目标声线参考音频。")
+    try:
+        from infer.svc_cover_workflow import run_svc_cover
+        from tools.svc_model_registry import engine_health
+        ready, reason = engine_health(engine)
+        if not ready:
+            return (*empty, f"引擎尚未就绪：{reason}。请到「SVC 模型管理」配置本地权重及运行环境。")
+        output_dir = ROOT_DIR / config.get("output_dir", "outputs")
+        result = run_svc_cover(
+            audio_path=audio_path, reference_path=reference_audio,
+            engine=engine, input_mode=input_mode, output_directory=str(output_dir),
+            device=config.get("device", "cuda"),
+            karaoke=bool(karaoke_separation),
+            separator_model=config.get("cover", {}).get("roformer_model", ROFORMER_DEFAULT_MODEL),
+            karaoke_model=config.get("cover", {}).get("karaoke_model", KARAOKE_DEFAULT_MODEL),
+            dereverb=bool(dereverb),
+            pitch_shift=_read_ui_int(pitch_shift, "pitch_shift", -12, 12),
+            diffusion_steps=_read_ui_int(diffusion_steps, "diffusion_steps", 1, 150),
+            vocals_volume=_read_ui_float(vocals_volume, "vocals_volume", 0, 200) / 100,
+            accompaniment_volume=_read_ui_float(accompaniment_volume, "accompaniment_volume", 0, 200) / 100,
+            reverb_amount=_read_ui_float(reverb_amount, "reverb_amount", 0, 100) / 100,
+            progress=lambda msg, step, total: progress(step / total, desc=msg),
+        )
+        for key in ("cover", "converted_vocals", "vocals", "lead_vocals",
+                    "backing_vocals", "accompaniment", "accompaniment_without_harmony"):
+            if result.get(key):
+                result[key] = normalize_download_output_path(result[key])
+        return (
+            result.get("cover"), result.get("converted_vocals"), result.get("vocals"),
+            result.get("lead_vocals"), result.get("backing_vocals"),
+            result.get("accompaniment"), result.get("accompaniment_without_harmony"),
+            f"✅ {engine} 本地转换完成。结果目录: {result['all_files_dir']}",
+        )
+    except Exception as exc:
+        import traceback
+        log.error(f"Local SVC failed: {traceback.format_exc()}")
+        return (*empty, f"❌ {engine} 处理失败: {exc}")
+
+
 def process_cover_with_downloads(
     audio_path: str,
     character_name: str,
@@ -1177,6 +1256,10 @@ def process_cover_with_downloads(
     rms_mix_rate: float,
     backing_mix: float,
     input_mode: str = "song",
+    svc_engine: str = "rvc",
+    target_reference: Optional[str] = None,
+    svc_steps: int = 35,
+    svc_dereverb: bool = False,
     progress=gr.Progress()
 ) -> Tuple[
     Optional[str],
@@ -1204,7 +1287,11 @@ def process_cover_with_downloads(
         accompaniment,
         accompaniment_without_harmony,
         status,
-    ) = process_cover(
+    ) = (process_zero_shot_cover(
+        audio_path, svc_engine, target_reference, pitch_shift,
+        karaoke_separation, vocals_volume, accompaniment_volume,
+        reverb_amount, input_mode, svc_steps, svc_dereverb, progress,
+    ) if svc_engine != "rvc" else process_cover(
         audio_path,
         character_name,
         pitch_shift,
@@ -1221,7 +1308,7 @@ def process_cover_with_downloads(
         backing_mix,
         input_mode=input_mode,
         progress=progress,
-    )
+    ))
     return (
         cover,
         converted,
@@ -2499,6 +2586,30 @@ def create_ui() -> gr.Blocks:
                             label=ui_text("input_audio", "cover"),
                             type="filepath"
                         )
+                        from tools.svc_model_registry import engine_choices, status_markdown
+                        cover_svc_engine = gr.Dropdown(
+                            label="歌声转换引擎 / Singing Engine",
+                            choices=engine_choices(),
+                            value="rvc",
+                            interactive=True,
+                            info="RVC 用现有角色 .pth/.index；新引擎用目标声线参考音频。"
+                        )
+                        cover_svc_reference = gr.Audio(
+                            label="目标声线参考 / Target Singer Reference",
+                            type="filepath", visible=False,
+                        )
+                        cover_svc_steps = gr.Slider(
+                            label="扩散采样步数 / Inference Steps",
+                            minimum=1, maximum=150, value=35, step=1,
+                            visible=False,
+                        )
+                        cover_svc_dereverb = gr.Checkbox(
+                            label="对主唱额外去混响 / DeReverb",
+                            value=False, visible=False,
+                        )
+                        cover_svc_readiness = gr.Markdown(
+                            value="RVC 使用当前角色模型。",
+                        )
 
                         gr.Markdown(f"#### 🎭 {ui_text('select_character', 'cover')}")
 
@@ -2757,6 +2868,27 @@ def create_ui() -> gr.Blocks:
                                 step=5,
                                 info=ui_text("backing_mix_info", "cover"),
                             )
+
+                # SVC engines may use different checkpoint types and settings.
+                def update_svc_engine_controls(engine: str):
+                    from tools.svc_model_registry import engine_health
+                    ok, reason = engine_health(engine)
+                    is_external = engine != "rvc"
+                    message = ("✅ " if ok else "⚠️ ") + reason
+                    return (
+                        gr.update(visible=is_external),
+                        gr.update(visible=is_external),
+                        gr.update(visible=is_external),
+                        gr.update(value=message),
+                        gr.update(interactive=not is_external),
+                    )
+
+                cover_svc_engine.change(
+                    fn=update_svc_engine_controls,
+                    inputs=[cover_svc_engine],
+                    outputs=[cover_svc_reference, cover_svc_steps, cover_svc_dereverb,
+                             cover_svc_readiness, character_dropdown],
+                )
 
                 # 开始按钮
                 cover_btn = gr.Button(
@@ -3101,6 +3233,10 @@ def create_ui() -> gr.Blocks:
                         cover_rms_mix_rate,
                         cover_backing_mix,
                         cover_input_mode,
+                        cover_svc_engine,
+                        cover_svc_reference,
+                        cover_svc_steps,
+                        cover_svc_dereverb,
                     ],
                     outputs=[
                         cover_output,
@@ -3127,6 +3263,49 @@ def create_ui() -> gr.Blocks:
                         cover_backing_vocals_output, cover_accompaniment_output,
                         cover_accompaniment_without_harmony_output],
                     outputs=None, js=PLAYER_UPDATE_JS, queue=False,
+                )
+
+            # ===== 统一 SVC 模型管理 =====
+            with gr.Tab("🎛️ SVC 模型管理 / Models"):
+                gr.Markdown("## 本地歌声转换引擎管理")
+                gr.Markdown(
+                    "RVC 角色模型仍在原角色管理界面。Seed-VC / YingMusic-SVC "
+                    "分别使用独立的本地 Python 环境。这里只保存路径，"
+                    "不会下载模型或上传歌曲到外部服务。"
+                )
+                svc_models_status = gr.Markdown(value=status_markdown())
+                svc_refresh_btn = gr.Button("🔄 检测本地模型状态")
+                svc_refresh_btn.click(fn=status_markdown, outputs=[svc_models_status])
+                svc_manage_engine = gr.Dropdown(
+                    label="配置引擎 / Engine",
+                    choices=[("Seed-VC Singing", "seed_vc"), ("YingMusic-SVC", "yingmusic_svc")],
+                    value="seed_vc",
+                )
+                svc_repository = gr.Textbox(label="引擎仓库目录 / Engine repository")
+                svc_python = gr.Textbox(label="独立 Python 路径 / Python executable")
+                svc_checkpoint = gr.Textbox(
+                    label="权重 checkpoint（Seed-VC 可以留空，首次运行由官方代码下载）")
+                svc_config_file = gr.Textbox(label="模型 YAML（与 checkpoint 同时填写）")
+                svc_manage_engine.change(
+                    fn=get_svc_config_ui, inputs=[svc_manage_engine],
+                    outputs=[svc_repository, svc_python, svc_checkpoint,
+                             svc_config_file, svc_models_status],
+                )
+                app.load(
+                    fn=get_svc_config_ui, inputs=[svc_manage_engine],
+                    outputs=[svc_repository, svc_python, svc_checkpoint,
+                             svc_config_file, svc_models_status],
+                )
+                svc_save_btn = gr.Button("💾 保存并检查本地路径", variant="primary")
+                svc_save_btn.click(
+                    fn=save_svc_config_ui,
+                    inputs=[svc_manage_engine, svc_repository, svc_python,
+                            svc_checkpoint, svc_config_file],
+                    outputs=[svc_models_status],
+                )
+                gr.Markdown(
+                    "未接入的 HQ-SVC、SoulX-Singer-SVC 会显示为计划中，"
+                    "不能从一键翻唱选择。路径检查成功不等于 GPU 推理已通过。"
                 )
 
             # ===== 设置标签页 =====
