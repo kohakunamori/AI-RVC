@@ -119,7 +119,8 @@ def check_models():
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="RVC AI 翻唱系统")
+    parser = argparse.ArgumentParser(description="AI-RVC Studio：默认原生桌面 GUI；--web 启用旧版服务")
+    parser.add_argument("--web", action="store_true", help="仅兼容用途：启动旧版 Gradio WebUI")
     parser.add_argument(
         "--host",
         type=str,
@@ -157,7 +158,12 @@ def main():
             sys.exit(1)
         return
 
-    # 环境检查
+    # Native desktop is the local default: no HTTP listener, no browser.
+    if not args.web:
+        from desktop.gui import launch
+        raise SystemExit(launch())
+
+    # Legacy browser workflow only when explicitly requested.
     if not args.skip_check:
         if not check_environment():
             sys.exit(1)
