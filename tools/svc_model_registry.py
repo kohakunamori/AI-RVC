@@ -39,17 +39,26 @@ KNOWN_ENGINES = {
     },
 }
 PATH_FIELDS = ("engine_repository", "engine_python", "checkpoint", "model_config")
+SHARED_FIELDS = ("engine_python", "cache_directory")
+SHARED_DEFAULTS = {field: "" for field in SHARED_FIELDS}
 DEFAULTS = {key: {field: "" for field in PATH_FIELDS}
             for key in KNOWN_ENGINES if key != "rvc"}
 
 
 def load_registry(path: Path = REGISTRY_FILE) -> dict:
     if not Path(path).exists():
-        return {k: dict(v) for k, v in DEFAULTS.items()}
+        return {**{k: dict(v) for k, v in DEFAULTS.items()}, "_shared": dict(SHARED_DEFAULTS)}
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or set(data) - set(DEFAULTS):
+    if not isinstance(data, dict) or set(data) - set(DEFAULTS) - {"_shared"}:
         raise ValueError("Unexpected SVC registry engine keys")
-    result = {k: dict(v) for k, v in DEFAULTS.items()}
+    result = {**{k: dict(v) for k, v in DEFAULTS.items()}, "_shared": dict(SHARED_DEFAULTS)}
+    shared = data.pop("_shared", {})
+    if not isinstance(shared, dict) or set(shared) - set(SHARED_FIELDS):
+        raise ValueError("Invalid shared SVC fields")
+    for key, value in shared.items():
+        if not isinstance(value, str) or len(value) > 4096:
+            raise ValueError(f"Invalid shared SVC path: {key}")
+        result["_shared"][key] = value.strip()
     for engine, values in data.items():
         if not isinstance(values, dict) or set(values) - set(PATH_FIELDS):
             raise ValueError(f"Invalid registry fields for {engine}")
@@ -58,6 +67,47 @@ def load_registry(path: Path = REGISTRY_FILE) -> dict:
                 raise ValueError(f"Invalid {engine}.{key} path")
             result[engine][key] = value.strip()
     return result
+
+
+def _write_registry(new_data: dict, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=target.parent, suffix=".json",
+        prefix=".svc-", delete=False,
+    ) as stream:
+        temporary = Path(stream.name)
+        json.dump(new_data, stream, indent=2, ensure_ascii=False)
+        stream.flush()
+        os.fsync(stream.fileno())
+    try:
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def save_shared_config(paths: dict, registry_file: Path = REGISTRY_FILE) -> dict:
+    """Configure one common Python environment and model-cache directory."""
+    if set(paths) - set(SHARED_FIELDS):
+        raise ValueError("Unknown shared SVC field")
+    data = load_registry(registry_file)
+    for field, value in paths.items():
+        if not isinstance(value, str) or len(value) > 4096:
+            raise ValueError(f"Invalid {field} path")
+        data["_shared"][field] = value.strip()
+    _write_registry(data, Path(registry_file))
+    return data
+
+
+def shared_python(registry: dict, engine: str) -> str:
+    """Use engine override if specified, otherwise explicitly configured common venv."""
+    return (registry[engine].get("engine_python")
+            or registry.get("_shared", {}).get("engine_python", ""))
+
+
+def shared_cache_dir(registry: dict | None = None) -> Path:
+    data = load_registry() if registry is None else registry
+    chosen = (data.get("_shared") or {}).get("cache_directory", "")
+    return Path(chosen).expanduser().resolve() if chosen else ROOT / "assets" / "model_cache"
 
 
 def save_engine_config(engine: str, paths: dict, registry_file: Path = REGISTRY_FILE) -> dict:
@@ -70,23 +120,7 @@ def save_engine_config(engine: str, paths: dict, registry_file: Path = REGISTRY_
         if not isinstance(value, str) or len(value) > 4096:
             raise ValueError(f"Invalid {key} path")
         new_data[engine][key] = value.strip()
-    target = Path(registry_file)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    # Atomic replace; prevent partially written model registry.
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=target.parent, suffix=".json",
-        prefix=".svc-", delete=False,
-    ) as stream:
-        temporary = Path(stream.name)
-        try:
-            json.dump(new_data, stream, indent=2, ensure_ascii=False)
-        finally:
-            stream.flush()
-            os.fsync(stream.fileno())
-    try:
-        temporary.replace(target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    _write_registry(new_data, Path(registry_file))
     return new_data
 
 
@@ -99,15 +133,17 @@ def engine_health(engine: str, registry: dict | None = None) -> tuple[bool, str]
         return True, "使用现有 RVC .pth/.index 角色管理"
     values = (load_registry() if registry is None else registry)[engine]
     repo = Path(values.get("engine_repository") or ".").expanduser()
-    python = Path(values.get("engine_python") or ".").expanduser()
+    active = load_registry() if registry is None else registry
+    py_value = shared_python(active, engine)
+    python = Path(py_value or ".").expanduser()
     if not values.get("engine_repository") or not repo.is_dir():
         return False, "请先配置有效的引擎仓库目录"
     entry = repo / {"seed_vc": "inference.py", "yingmusic_svc": "my_inference.py",
                     "soulx_singer": "cli/inference_svc.py"}[engine]
     if not entry.is_file():
         return False, f"缺少引擎入口：{entry.name}"
-    if not values.get("engine_python") or not python.is_file():
-        return False, "请配置已安装依赖的独立 Python 解释器路径"
+    if not py_value or not python.is_file():
+        return False, "请配置共享 Python 环境或引擎专用 Python 路径"
     required = ("checkpoint", "model_config") if KNOWN_ENGINES[engine]["checkpoint_required"] else ()
     for field in required:
         if not values.get(field) or not Path(values[field]).expanduser().is_file():
@@ -118,7 +154,8 @@ def engine_health(engine: str, registry: dict | None = None) -> tuple[bool, str]
         return False, "权重路径不存在"
     if values.get("model_config") and not Path(values["model_config"]).expanduser().is_file():
         return False, "模型 YAML 路径不存在"
-    return True, "本地文件齐备（推理能力仍需 GPU 测试）"
+    selected_mode = "共享 Python" if not values.get("engine_python") else "专用 Python"
+    return True, f"本地文件齐备，{selected_mode}（依赖和 GPU 仍需实测）"
 
 
 def engine_choices() -> list[tuple[str, str]]:
@@ -145,6 +182,6 @@ def get_engine_job_options(engine: str, registry: dict | None = None) -> dict:
         raise RuntimeError(f"{engine} 未就绪: {reason}")
     options = values[engine]
     return dict(engine_repository=Path(options["engine_repository"]).expanduser(),
-                engine_python=Path(options["engine_python"]).expanduser(),
+                engine_python=Path(shared_python(values, engine)).expanduser(),
                 checkpoint=Path(options["checkpoint"]).expanduser() if options["checkpoint"] else None,
                 model_config=Path(options["model_config"]).expanduser() if options["model_config"] else None)
