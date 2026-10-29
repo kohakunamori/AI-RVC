@@ -25,7 +25,9 @@ from configs.config import Config
 
 # config = Config()
 
-# Lazy: realtime inference uses n_cpu=1 and must not start a manager\n# subprocess merely by importing the bundled RVC backend.\nmm = None
+# Lazy: realtime inference uses n_cpu=1 and must not start a manager
+# subprocess merely by importing the bundled RVC backend.
+mm = None
 
 
 def printt(strr, *args):
@@ -258,7 +260,10 @@ class RVC:
         part_length = 160 * ((length // 160 - 1) // n_cpu + 1)
         n_cpu = (length // 160 - 1) // (part_length // 160) + 1
         ts = ttime()
-        global mm\n        if mm is None:\n            mm = M()\n        res_f0 = mm.dict()
+        global mm
+        if mm is None:
+            mm = M()
+        res_f0 = mm.dict()
         for idx in range(n_cpu):
             tail = part_length * (idx + 1) + 320
             if idx == 0:
