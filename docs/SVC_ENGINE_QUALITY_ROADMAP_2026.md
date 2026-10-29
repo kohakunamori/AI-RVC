@@ -20,6 +20,8 @@ Updated 2026-10-29. Status: design + two isolated CLI bridges committed; **no re
 
 Published Seed-VC M4Singer experiment: RVC v2 F0CORR 0.9404 / RMSE 30.43 / SECS 0.7264 / OVRL 3.12; Seed-VC 0.9375 / 33.35 / 0.7405 / 3.06. None dominates on every metric. Other research results use different evaluation datasets; don't mix benchmark numbers.
 
+An independent **same-protocol comparison from the YingMusic-SVC paper (Mix Vocal condition, source lead + harmony)**: Seed-VC CER=17.30%, log-F0 correlation=84.02%, naturalness MOS=2.93, singer-similarity MOS=2.78; YingMusic-Full CER=15.90%, log-F0=86.47%, naturalness=3.31, similarity=3.12. These improvements are specific to that benchmark, not validated Japanese-song results. Source: https://arxiv.org/abs/2512.04793 (Table 2).
+
 ## Implemented now: local, separately installed engine subprocesses
 
 Code: infer/svc_engine_bridge.py, tools/run_svc_engine.py, tools/yingmusic_svc_worker.py.
