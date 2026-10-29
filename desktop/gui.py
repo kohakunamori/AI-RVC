@@ -274,6 +274,16 @@ class DesktopWindow(QMainWindow):
         for name in ("rmvpe", "fcpe", "pm"):
             self.live_f0.addItem(name.upper(), name)
         fields.addRow("F0 算法", self.live_f0)
+        self.live_rate = QComboBox()
+        for value in (32000, 40000, 44100, 48000):
+            self.live_rate.addItem(f"{value:,} Hz", value)
+        self.live_rate.setCurrentIndex(3)
+        fields.addRow("声卡采样率", self.live_rate)
+        self.live_index_rate = QSpinBox()
+        self.live_index_rate.setRange(0, 100)
+        self.live_index_rate.setValue(0)
+        self.live_index_rate.setSuffix(" %")
+        fields.addRow("索引检索比例", self.live_index_rate)
         self.live_pitch = QSpinBox()
         self.live_pitch.setRange(-12, 12)
         self.live_pitch.setSuffix(" 半音")
@@ -349,6 +359,8 @@ class DesktopWindow(QMainWindow):
             input_device=self.input_device.currentData(),
             output_device=self.output_device.currentData(),
             block_ms=self.live_block.currentData(),
+            sample_rate=self.live_rate.currentData(),
+            index_rate=self.live_index_rate.value() / 100,
             context_ms=self.live_context.value(),
             pitch_shift=self.live_pitch.value(),
             f0_method=self.live_f0.currentData(),
