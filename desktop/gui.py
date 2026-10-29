@@ -441,6 +441,23 @@ class DesktopWindow(QMainWindow):
         form.addRow("", save)
         self.manage_engine.currentIndexChanged.connect(self._show_engine)
         layout.addWidget(model)
+        rvc_library_group = QGroupBox("已下载 RVC 声线库")
+        library_form = QFormLayout(rvc_library_group)
+        self.rvc_library = QComboBox()
+        library_form.addRow("本地 .pth 声线", self.rvc_library)
+        library_actions = QHBoxLayout()
+        library_reload = QPushButton("↻ 扫描模型")
+        library_to_cover = QPushButton("用于 AI 翻唱")
+        library_to_live = QPushButton("用于实时变声")
+        library_reload.clicked.connect(self._refresh_rvc_library)
+        library_to_cover.clicked.connect(lambda: self._select_rvc_library_model(self.cover_model))
+        library_to_live.clicked.connect(lambda: self._select_rvc_library_model(self.live_model))
+        library_actions.addWidget(library_reload)
+        library_actions.addWidget(library_to_cover)
+        library_actions.addWidget(library_to_live)
+        library_form.addRow("", library_actions)
+        layout.addWidget(rvc_library_group)
+
         status = QGroupBox("本地模型检测")
         status_layout = QVBoxLayout(status)
         self.models_log = QPlainTextEdit()
@@ -457,7 +474,24 @@ class DesktopWindow(QMainWindow):
         self.shared_cache.setText(data.get("_shared", {}).get("cache_directory", ""))
         self._show_engine()
         self._refresh_models()
+        self._refresh_rvc_library()
         return pane
+
+    def _refresh_rvc_library(self):
+        self.rvc_library.clear()
+        root = ROOT / "assets" / "weights"
+        if not root.is_dir():
+            return
+        for model in sorted(root.rglob("*.pth"), key=lambda path: str(path).lower()):
+            # List existing local model files; never load big checkpoints in the GUI.
+            self.rvc_library.addItem(str(model.relative_to(root)), str(model.resolve()))
+
+    def _select_rvc_library_model(self, field):
+        value = self.rvc_library.currentData()
+        if value:
+            field.setText(value)
+            self.settings.setValue("rvc_model", value)
+            self.statusBar().showMessage("已选本地 RVC 声线：" + Path(value).stem, 5000)
 
     def _show_engine(self):
         config = load_registry().get(self.manage_engine.currentData(), {})
