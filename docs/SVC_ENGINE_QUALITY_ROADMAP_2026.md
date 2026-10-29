@@ -50,6 +50,21 @@ YingMusic-SVC example:
 
 Use the upstream model's separate environment installation instructions. Do not install both engines in the host AI-RVC requirements or vendor GPL dependencies without respecting the license.
 
+## WebUI integration (implemented, not GPU-validated)
+
+The existing **AI Cover** tab now has a **Singing Engine** dropdown:
+- **RVC v1/v2**: remains selected by default; select a character checkpoint/index exactly as before.
+- **Seed-VC / YingMusic-SVC**: upload a singer reference WAV or MP3 (requires permission to use that voice), choose diffusion steps and optional dereverb. Existing character RVC .pth/index are not required.
+- For a full song, choose `song`; the selected Karaoke model produces lead vocals + backing/instrumental, the external SVC engine converts only the lead, and AI-RVC mixes the converted vocal with the accompaniment using the existing Float32 WAV export.
+- For an already-isolated vocal, choose `vocals`; the interface outputs the converted vocal and deliberately does not fabricate an accompaniment or mixed song.
+
+The **SVC 模型管理 / Models** tab centrally lists RVC, Seed-VC, YingMusic-SVC and planned HQ-SVC / SoulX-Singer-SVC. For installed external engines configure:
+`engine_repository` (cloned source), `engine_python` (absolute Python executable within isolated env), plus `checkpoint` and `model_config` (required together for YingMusic, optional for Seed). These are saved locally in `configs/svc_engines.json`; path validation does **not** prove that dependencies, CUDA or inference have passed. No automatic pip install and no paid API.
+
+**When switching to Seed-VC or YingMusic-SVC, the character dropdown becomes inactive**; when returning to RVC, the original character selection and conversion pathway are retained.
+
+Known limitations: GPUs, official model checkpoints and Windows 50-series execution are untested in this PR. New SVC engines may still require model downloads using their own upstream installation instructions; the UI does not automatically install code, Python or checkpoints. Karaoke default is MVSep 9205 and uses existing weights. New engines bypass existing RVC-specific source constraints, protecting unprocessed high frequency detail.
+
 ## Development schedule (gated, no implied completion)
 
 ### P0 — Accept actual model inference
